@@ -11,6 +11,7 @@ matters when data is on the line -- does not pull in pyarrow, duckdb or fastapi.
 from __future__ import annotations
 
 import argparse
+import logging
 import signal
 import sys
 from pathlib import Path
@@ -31,6 +32,10 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="f1dc", description="F1 Data Center")
+    parser.add_argument(
+        "-v", "--verbose", action="count", default=0,
+        help="show diagnostic logging; repeat for debug detail",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_record = sub.add_parser("record", help="capture telemetry until stopped")
@@ -172,6 +177,11 @@ COMMANDS = {
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    logging.basicConfig(
+        level={0: logging.WARNING, 1: logging.INFO}.get(args.verbose, logging.DEBUG),
+        format="%(asctime)s %(levelname)-7s %(name)s  %(message)s",
+        datefmt="%H:%M:%S",
+    )
     try:
         return COMMANDS[args.command](args)
     except ConfigError as exc:

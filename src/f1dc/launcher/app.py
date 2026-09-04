@@ -18,7 +18,6 @@ import subprocess
 import sys
 import time
 import tkinter as tk
-from pathlib import Path
 from tkinter import font as tkfont
 
 from f1dc.capture.status import (

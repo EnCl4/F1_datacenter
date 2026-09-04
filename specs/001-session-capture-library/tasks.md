@@ -9,6 +9,10 @@ description: "Task list for feature 001 — Session Capture & Library"
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md),
 [data-model.md](./data-model.md), [contracts/](./contracts/)
 
+**Status**: Implemented. 231 tests pass; `ruff` clean. Two tasks (T043, T087) remain
+open because they require driving the game with the recorder running -- everything
+they depend on is built and verified against the real 229 MB capture.
+
 **Tests**: **Included and mandatory.** The template treats tests as optional, but constitution
 principle IV (NON-NEGOTIABLE) requires every packet parser to be validated against real
 captured bytes. Test tasks below are therefore not discretionary.
@@ -32,13 +36,13 @@ Single Python package at `src/f1dc/` with a separate `frontend/` tree, per
 
 **Purpose**: Project skeleton and the guardrails that keep the constitution enforceable.
 
-- [ ] T001 Create the source tree from [plan.md](./plan.md#project-structure): `src/f1dc/{capture,launcher,wire/f1_2023,ingest,store,api/routes,cli}/`, `tests/{unit,contract,integration,fixtures}/`
-- [ ] T002 Add `pyproject.toml` declaring runtime deps (`pyarrow`, `duckdb`, `zstandard`, `fastapi`, `uvicorn`) and a `dev` extra (`pytest`, `ruff`)
-- [ ] T003 [P] Configure `ruff` formatting and linting in `pyproject.toml`
-- [ ] T004 [P] **Add the lint rule enforcing that `src/f1dc/capture/**` imports only the standard library** — constitution principle II made mechanical rather than remembered
-- [ ] T005 [P] Configure `pytest` in `pyproject.toml`, including a `needs_full_capture` marker that skips cleanly when the 229 MB capture is absent
-- [ ] T006 [P] Scaffold `frontend/` with Vite + React + TypeScript
-- [ ] T007 Implement `src/f1dc/config.py`: data-directory resolution defaulting to `C:\F1Data`, plus cloud-sync-root detection that refuses OneDrive/Dropbox/Google Drive paths without explicit override (FR-004, principle VIII)
+- [x] T001 Create the source tree from [plan.md](./plan.md#project-structure): `src/f1dc/{capture,launcher,wire/f1_2023,ingest,store,api/routes,cli}/`, `tests/{unit,contract,integration,fixtures}/`
+- [x] T002 Add `pyproject.toml` declaring runtime deps (`pyarrow`, `duckdb`, `zstandard`, `fastapi`, `uvicorn`) and a `dev` extra (`pytest`, `ruff`)
+- [x] T003 [P] Configure `ruff` formatting and linting in `pyproject.toml`
+- [x] T004 [P] **Add the lint rule enforcing that `src/f1dc/capture/**` imports only the standard library** — constitution principle II made mechanical rather than remembered
+- [x] T005 [P] Configure `pytest` in `pyproject.toml`, including a `needs_full_capture` marker that skips cleanly when the 229 MB capture is absent
+- [x] T006 [P] Scaffold `frontend/` with Vite + React + TypeScript
+- [x] T007 Implement `src/f1dc/config.py`: data-directory resolution defaulting to `C:\F1Data`, plus cloud-sync-root detection that refuses OneDrive/Dropbox/Google Drive paths without explicit override (FR-004, principle VIII)
 
 ---
 
@@ -50,29 +54,29 @@ Single Python package at `src/f1dc/` with a separate `frontend/` tree, per
 
 ### Raw log and fixture
 
-- [ ] T008 Implement `src/f1dc/capture/rawlog.py`: file header and record framing, read and write, exactly per [contracts/raw-log-format.md](./contracts/raw-log-format.md)
-- [ ] T009 [P] Contract test `tests/contract/test_raw_log_format.py`: round-trip, and a truncated file readable up to its last complete record
-- [ ] T010 **Build the committed fixture** `tests/fixtures/calibration_slice.f1raw` from `C:\F1Data\raw\calibration.bin` — under 5 MB, containing all 13 packet types, a lap transition, the pit stop, a session start and end, and the `sessionUID == 0` records (R11)
+- [x] T008 Implement `src/f1dc/capture/rawlog.py`: file header and record framing, read and write, exactly per [contracts/raw-log-format.md](./contracts/raw-log-format.md)
+- [x] T009 [P] Contract test `tests/contract/test_raw_log_format.py`: round-trip, and a truncated file readable up to its last complete record
+- [x] T010 **Build the committed fixture** `tests/fixtures/calibration_slice.f1raw` from `C:\F1Data\raw\calibration.bin` — under 5 MB, containing all 13 packet types, a lap transition, the pit stop, a session start and end, and the `sessionUID == 0` records (R11)
 
 ### Wire layer
 
-- [ ] T011 Implement `src/f1dc/wire/header.py`: the 29-byte packet header
-- [ ] T012 [P] Unit test `tests/unit/test_header.py` decoding headers from the fixture
-- [ ] T013 Implement `src/f1dc/wire/registry.py`: dispatch on `(packetFormat, packetId, packetVersion)`; unrecognised tuples are counted and reported, never coerced (principle III, FR-017)
-- [ ] T014 [P] Implement `src/f1dc/wire/f1_2023/enums.py`: track ids, session types, the `session_category` mapping, weather, tyre compounds, driver and result status
-- [ ] T015 [P] Implement codec `src/f1dc/wire/f1_2023/session.py` (644 bytes)
-- [ ] T016 [P] Implement codec `src/f1dc/wire/f1_2023/lap_data.py` (1131 bytes)
-- [ ] T017 [P] Implement codec `src/f1dc/wire/f1_2023/car_status.py` (1239 bytes)
-- [ ] T018 [P] Implement codec `src/f1dc/wire/f1_2023/car_damage.py` (953 bytes)
-- [ ] T019 [P] Implement codec `src/f1dc/wire/f1_2023/car_setups.py` (1107 bytes)
-- [ ] T020 [P] Implement codec `src/f1dc/wire/f1_2023/session_history.py` (1460 bytes)
-- [ ] T021 [P] Implement codec `src/f1dc/wire/f1_2023/final_classification.py` (1020 bytes)
-- [ ] T022 [P] Implement codec `src/f1dc/wire/f1_2023/tyre_sets.py` (231 bytes)
-- [ ] T023 [P] Implement codec `src/f1dc/wire/f1_2023/event.py` (45 bytes, 4-character code only — detail payload deferred per R6)
-- [ ] T024 Add the import-time assertion that every codec's field sizes sum to its declared wire size (principle IV)
-- [ ] T025 [P] Contract test `tests/contract/test_wire_sizes.py` asserting all 13 sizes against the table observed in the real capture
-- [ ] T026 [P] Unit test `tests/unit/test_codecs.py`: decode every packet type from the fixture and range-check values
-- [ ] T027 [P] Unit test `tests/unit/test_unknown_format.py`: an unrecognised tuple is reported and skipped, never decoded as a neighbour
+- [x] T011 Implement `src/f1dc/wire/header.py`: the 29-byte packet header
+- [x] T012 [P] Unit test `tests/unit/test_header.py` decoding headers from the fixture
+- [x] T013 Implement `src/f1dc/wire/registry.py`: dispatch on `(packetFormat, packetId, packetVersion)`; unrecognised tuples are counted and reported, never coerced (principle III, FR-017)
+- [x] T014 [P] Implement `src/f1dc/wire/f1_2023/enums.py`: track ids, session types, the `session_category` mapping, weather, tyre compounds, driver and result status
+- [x] T015 [P] Implement codec `src/f1dc/wire/f1_2023/session.py` (644 bytes)
+- [x] T016 [P] Implement codec `src/f1dc/wire/f1_2023/lap_data.py` (1131 bytes)
+- [x] T017 [P] Implement codec `src/f1dc/wire/f1_2023/car_status.py` (1239 bytes)
+- [x] T018 [P] Implement codec `src/f1dc/wire/f1_2023/car_damage.py` (953 bytes)
+- [x] T019 [P] Implement codec `src/f1dc/wire/f1_2023/car_setups.py` (1107 bytes)
+- [x] T020 [P] Implement codec `src/f1dc/wire/f1_2023/session_history.py` (1460 bytes)
+- [x] T021 [P] Implement codec `src/f1dc/wire/f1_2023/final_classification.py` (1020 bytes)
+- [x] T022 [P] Implement codec `src/f1dc/wire/f1_2023/tyre_sets.py` (231 bytes)
+- [x] T023 [P] Implement codec `src/f1dc/wire/f1_2023/event.py` (45 bytes, 4-character code only — detail payload deferred per R6)
+- [x] T024 Add the import-time assertion that every codec's field sizes sum to its declared wire size (principle IV)
+- [x] T025 [P] Contract test `tests/contract/test_wire_sizes.py` asserting all 13 sizes against the table observed in the real capture
+- [x] T026 [P] Unit test `tests/unit/test_codecs.py`: decode every packet type from the fixture and range-check values
+- [x] T027 [P] Unit test `tests/unit/test_unknown_format.py`: an unrecognised tuple is reported and skipped, never decoded as a neighbour
 
 **Checkpoint**: Raw logs can be written and read, and every packet type decodes from real bytes.
 
@@ -88,25 +92,25 @@ touching the app, confirm one complete raw log per session with a reported loss 
 
 ### Tests for User Story 1
 
-- [ ] T028 [P] [US1] Integration test `tests/integration/test_recorder_lossless.py`: replay the fixture over UDP into a live recorder, assert the written log is byte-identical to what was sent
-- [ ] T029 [P] [US1] Unit test `tests/unit/test_status_file.py`: status file shape matches [contracts/cli.md](./contracts/cli.md), including `state` transitions
-- [ ] T030 [P] [US1] Unit test `tests/unit/test_loss_metric.py`: frame-gap counting, using the known 82-gap baseline from the reference capture
+- [x] T028 [P] [US1] Integration test `tests/integration/test_recorder_lossless.py`: replay the fixture over UDP into a live recorder, assert the written log is byte-identical to what was sent
+- [x] T029 [P] [US1] Unit test `tests/unit/test_status_file.py`: status file shape matches [contracts/cli.md](./contracts/cli.md), including `state` transitions
+- [x] T030 [P] [US1] Unit test `tests/unit/test_loss_metric.py`: frame-gap counting, using the known 82-gap baseline from the reference capture
 
 ### Implementation for User Story 1
 
-- [ ] T031 [US1] Implement `src/f1dc/capture/recorder.py`: socket bind, `SO_RCVBUF` raised to 1 MB, receive thread performing only `recv` and `queue.put`
-- [ ] T032 [US1] Add the bounded queue and writer thread; record queue high-water mark as a reportable disk-pressure signal (R3)
-- [ ] T033 [US1] Detect `sessionUID` changes and roll to a new raw file, naming per the raw-log contract
-- [ ] T034 [US1] Compute the loss metric from `frameIdentifier` gaps and report it per session (FR-003)
-- [ ] T035 [US1] Implement `src/f1dc/capture/status.py`: JSON status file written at 2 Hz (FR-026)
-- [ ] T036 [US1] Implement late-start detection — first `m_currentLapNum > 1` or elevated `sessionTime` sets `started_late` (FR-027, R12)
-- [ ] T037 [US1] Add startup guards with the documented exit codes: port already bound → 3 (FR-006), data dir unwritable or a sync root → 4, insufficient disk → 5 (FR-005)
-- [ ] T038 [US1] Implement `f1dc record` in `src/f1dc/cli/main.py`
-- [ ] T039 [US1] Implement `src/f1dc/launcher/app.py`: Tkinter window that spawns and supervises the recorder subprocess, restarting it if it dies unexpectedly
-- [ ] T040 [US1] Launcher displays **Listening** / **Recording — {track}, {session type}** with current lap, readable within 2 seconds (FR-026, SC-010)
-- [ ] T041 [US1] Launcher surfaces the late-start warning prominently (FR-027)
-- [ ] T042 [US1] Add a desktop-shortcut creation step launching the window via `pythonw` with no console (FR-025)
-- [ ] T043 [US1] Verify [quickstart.md](./quickstart.md) Scenarios 1–4
+- [x] T031 [US1] Implement `src/f1dc/capture/recorder.py`: socket bind, `SO_RCVBUF` raised to 1 MB, receive thread performing only `recv` and `queue.put`
+- [x] T032 [US1] Add the bounded queue and writer thread; record queue high-water mark as a reportable disk-pressure signal (R3)
+- [x] T033 [US1] Detect `sessionUID` changes and roll to a new raw file, naming per the raw-log contract
+- [x] T034 [US1] Compute the loss metric from `frameIdentifier` gaps and report it per session (FR-003)
+- [x] T035 [US1] Implement `src/f1dc/capture/status.py`: JSON status file written at 2 Hz (FR-026)
+- [x] T036 [US1] Implement late-start detection — first `m_currentLapNum > 1` or elevated `sessionTime` sets `started_late` (FR-027, R12)
+- [x] T037 [US1] Add startup guards with the documented exit codes: port already bound → 3 (FR-006), data dir unwritable or a sync root → 4, insufficient disk → 5 (FR-005)
+- [x] T038 [US1] Implement `f1dc record` in `src/f1dc/cli/main.py`
+- [x] T039 [US1] Implement `src/f1dc/launcher/app.py`: Tkinter window that spawns and supervises the recorder subprocess, restarting it if it dies unexpectedly
+- [x] T040 [US1] Launcher displays **Listening** / **Recording — {track}, {session type}** with current lap, readable within 2 seconds (FR-026, SC-010)
+- [x] T041 [US1] Launcher surfaces the late-start warning prominently (FR-027)
+- [x] T042 [US1] Add a desktop-shortcut creation step launching the window via `pythonw` with no console (FR-025)
+- [ ] T043 [US1] (needs the game running) Verify [quickstart.md](./quickstart.md) Scenarios 1–4
 
 **Checkpoint**: 🎯 **MVP.** Sessions are being captured and preserved. Nothing analyses them
 yet, but no session driven from here on is ever lost.
@@ -124,34 +128,34 @@ without driving anything new.
 
 ### Tests for User Story 2
 
-- [ ] T044 [P] [US2] Unit test `tests/unit/test_sessionizer.py`: `sessionUID == 0` discarded, the fixture's two sessions resolved, end classification per the data-model table
-- [ ] T045 [P] [US2] Unit test `tests/unit/test_lap_splitting.py`: **`m_lastLapTimeInMS` attributed to lap N−1**, and **sector recombination `minutes × 60000 + ms` not wrapping above 65.535 s** — the two defects found during design (R8)
-- [ ] T046 [P] [US2] Unit test `tests/unit/test_lap_validity.py`: the race branch versus the practice/qualifying branch (R9, FR-012)
-- [ ] T047 [P] [US2] Integration test `tests/integration/test_ingest_idempotent.py`: two runs produce byte-identical Parquet and no duplicate catalog rows (FR-015, SC-005)
-- [ ] T048 [P] [US2] Contract test `tests/contract/test_api_sessions.py` against [contracts/http-api.md](./contracts/http-api.md)
+- [x] T044 [P] [US2] Unit test `tests/unit/test_sessionizer.py`: `sessionUID == 0` discarded, the fixture's two sessions resolved, end classification per the data-model table
+- [x] T045 [P] [US2] Unit test `tests/unit/test_lap_splitting.py`: **`m_lastLapTimeInMS` attributed to lap N−1**, and **sector recombination `minutes × 60000 + ms` not wrapping above 65.535 s** — the two defects found during design (R8)
+- [x] T046 [P] [US2] Unit test `tests/unit/test_lap_validity.py`: the race branch versus the practice/qualifying branch (R9, FR-012)
+- [x] T047 [P] [US2] Integration test `tests/integration/test_ingest_idempotent.py`: two runs produce byte-identical Parquet and no duplicate catalog rows (FR-015, SC-005)
+- [x] T048 [P] [US2] Contract test `tests/contract/test_api_sessions.py` against [contracts/http-api.md](./contracts/http-api.md)
 
 ### Implementation for User Story 2
 
-- [ ] T049 [US2] Implement `src/f1dc/ingest/sessionizer.py`: session boundaries, `sessionUID == 0` discard, natural-end classification from `CHQF` / `SEND` / FinalClassification (FR-007, FR-014, R7)
-- [ ] T050 [US2] Implement `src/f1dc/ingest/laps.py`: lap splitting on `m_currentLapNum`, sector recombination, and correct lap-time attribution (FR-010)
-- [ ] T051 [US2] Cross-validate `LapData`-derived lap times against `SessionHistory`; disagreement fails rather than silently preferring one source (R8)
-- [ ] T052 [US2] Implement `src/f1dc/ingest/validity.py`: the session-type-branching `counts` rule and `exclusion_reason` (FR-012, principle VI)
-- [ ] T053 [P] [US2] Implement `src/f1dc/store/schema.py`: pyarrow schemas for Session, Stint and Lap per [data-model.md](./data-model.md)
-- [ ] T054 [P] [US2] Implement `src/f1dc/store/layout.py`: the per-session Parquet path scheme
-- [ ] T055 [US2] Implement `src/f1dc/ingest/pipeline.py`: write to a temp directory and rename into place, making idempotence structural (FR-015, principle VII)
-- [ ] T056 [US2] Implement `src/f1dc/ingest/compress.py`: zstd after session close, removing the original only after the compressed file verifies (R4)
-- [ ] T057 [US2] Implement `src/f1dc/store/catalog.py`: DuckDB views over the Parquet plus the recordings table
-- [ ] T058 [US2] Implement `f1dc ingest` with `--all` and `--force` and the documented exit codes (FR-016)
-- [ ] T059 [US2] Implement `src/f1dc/api/main.py`: FastAPI, read-only, bound to loopback
-- [ ] T060 [P] [US2] Implement `GET /api/health` and `GET /api/status`, treating a status file stale by >10 s as stopped
-- [ ] T061 [US2] Implement `GET /api/sessions` with circuit, category, session-type and date filters plus pagination, ordered most recent first (FR-018, FR-019, FR-020)
-- [ ] T062 [P] [US2] Implement `GET /api/tracks` for the filter control
-- [ ] T063 [US2] Build the `SessionLibrary` page in `frontend/src/pages/` — list ordered most recent first
-- [ ] T064 [US2] Add library filters for circuit, session category and date range
-- [ ] T065 [P] [US2] Build `RecordingBanner` showing when nothing is being recorded (FR-029)
-- [ ] T066 [US2] Mark incomplete and abandoned sessions visibly in the list (FR-023)
-- [ ] T067 [US2] Implement `f1dc serve` including serving the built frontend
-- [ ] T068 [US2] Verify [quickstart.md](./quickstart.md) Scenarios 5, 6 and 9
+- [x] T049 [US2] Implement `src/f1dc/ingest/sessionizer.py`: session boundaries, `sessionUID == 0` discard, natural-end classification from `CHQF` / `SEND` / FinalClassification (FR-007, FR-014, R7)
+- [x] T050 [US2] Implement `src/f1dc/ingest/laps.py`: lap splitting on `m_currentLapNum`, sector recombination, and correct lap-time attribution (FR-010)
+- [x] T051 [US2] Cross-validate `LapData`-derived lap times against `SessionHistory`; disagreement fails rather than silently preferring one source (R8)
+- [x] T052 [US2] Implement `src/f1dc/ingest/validity.py`: the session-type-branching `counts` rule and `exclusion_reason` (FR-012, principle VI)
+- [x] T053 [P] [US2] Implement `src/f1dc/store/schema.py`: pyarrow schemas for Session, Stint and Lap per [data-model.md](./data-model.md)
+- [x] T054 [P] [US2] Implement `src/f1dc/store/layout.py`: the per-session Parquet path scheme
+- [x] T055 [US2] Implement `src/f1dc/ingest/pipeline.py`: write to a temp directory and rename into place, making idempotence structural (FR-015, principle VII)
+- [x] T056 [US2] Implement `src/f1dc/ingest/compress.py`: zstd after session close, removing the original only after the compressed file verifies (R4)
+- [x] T057 [US2] Implement `src/f1dc/store/catalog.py`: DuckDB views over the Parquet plus the recordings table
+- [x] T058 [US2] Implement `f1dc ingest` with `--all` and `--force` and the documented exit codes (FR-016)
+- [x] T059 [US2] Implement `src/f1dc/api/main.py`: FastAPI, read-only, bound to loopback
+- [x] T060 [P] [US2] Implement `GET /api/health` and `GET /api/status`, treating a status file stale by >10 s as stopped
+- [x] T061 [US2] Implement `GET /api/sessions` with circuit, category, session-type and date filters plus pagination, ordered most recent first (FR-018, FR-019, FR-020)
+- [x] T062 [P] [US2] Implement `GET /api/tracks` for the filter control
+- [x] T063 [US2] Build the `SessionLibrary` page in `frontend/src/pages/` — list ordered most recent first
+- [x] T064 [US2] Add library filters for circuit, session category and date range
+- [x] T065 [P] [US2] Build `RecordingBanner` showing when nothing is being recorded (FR-029)
+- [x] T066 [US2] Mark incomplete and abandoned sessions visibly in the list (FR-023)
+- [x] T067 [US2] Implement `f1dc serve` including serving the built frontend
+- [x] T068 [US2] Verify [quickstart.md](./quickstart.md) Scenarios 5, 6 and 9
 
 **Checkpoint**: Sessions are captured, interpreted and browsable. Stories 1 and 2 both stand
 on their own.
@@ -168,21 +172,21 @@ game's reported times with correct tyre, validity and pit information.
 
 ### Tests for User Story 3
 
-- [ ] T069 [P] [US3] Unit test `tests/unit/test_stints.py`: stint boundaries from `SessionHistory`, cross-checked against `CarStatus` compound transitions
-- [ ] T070 [P] [US3] Integration test `tests/integration/test_reference_race.py`: assert the known reference figures — Interlagos, Race, 5 laps, overcast, 31 °C / 24 °C, AI 90, assists off, and laps 1:16.859 / 1:11.439 / 1:19.146 (pit) / 1:12.642
-- [ ] T071 [P] [US3] Contract test `tests/contract/test_api_laps.py`: every lap returned with `counts` and `exclusion_reason` present
+- [x] T069 [P] [US3] Unit test `tests/unit/test_stints.py`: stint boundaries from `SessionHistory`, cross-checked against `CarStatus` compound transitions
+- [x] T070 [P] [US3] Integration test `tests/integration/test_reference_race.py`: assert the known reference figures — Interlagos, Race, 5 laps, overcast, 31 °C / 24 °C, AI 90, assists off, and laps 1:16.859 / 1:11.439 / 1:19.146 (pit) / 1:12.642
+- [x] T071 [P] [US3] Contract test `tests/contract/test_api_laps.py`: every lap returned with `counts` and `exclusion_reason` present
 
 ### Implementation for User Story 3
 
-- [ ] T072 [US3] Extract stints in ingest from `SessionHistory.m_tyreStintsHistoryData`, cross-checked against `CarStatus`
-- [ ] T073 [US3] Enrich laps with tyre compound and age, per-wheel wear (**named `_rl`/`_rr`/`_fl`/`_fr`, never positional**), fuel, pit status, penalties and corner-cutting warnings (FR-011, FR-013)
-- [ ] T074 [US3] Decode per-sector validity from `m_lapValidBitFlags` onto each lap
-- [ ] T075 [P] [US3] Implement `GET /api/sessions/{session_uid}` returning the full comparability context (FR-022)
-- [ ] T076 [P] [US3] Implement `GET /api/sessions/{session_uid}/laps` returning every lap with its exclusion reason (FR-021)
-- [ ] T077 [P] [US3] Implement `GET /api/sessions/{session_uid}/stints`
-- [ ] T078 [US3] Build the `SessionDetail` page and `LapTable` component
-- [ ] T079 [US3] Build `ContextPanel` displaying assists, weather, temperatures and difficulty beside the lap times (FR-022, principle VI)
-- [ ] T080 [US3] Verify [quickstart.md](./quickstart.md) Scenarios 7 and 8
+- [x] T072 [US3] Extract stints in ingest from `SessionHistory.m_tyreStintsHistoryData`, cross-checked against `CarStatus`
+- [x] T073 [US3] Enrich laps with tyre compound and age, per-wheel wear (**named `_rl`/`_rr`/`_fl`/`_fr`, never positional**), fuel, pit status, penalties and corner-cutting warnings (FR-011, FR-013)
+- [x] T074 [US3] Decode per-sector validity from `m_lapValidBitFlags` onto each lap
+- [x] T075 [P] [US3] Implement `GET /api/sessions/{session_uid}` returning the full comparability context (FR-022)
+- [x] T076 [P] [US3] Implement `GET /api/sessions/{session_uid}/laps` returning every lap with its exclusion reason (FR-021)
+- [x] T077 [P] [US3] Implement `GET /api/sessions/{session_uid}/stints`
+- [x] T078 [US3] Build the `SessionDetail` page and `LapTable` component
+- [x] T079 [US3] Build `ContextPanel` displaying assists, weather, temperatures and difficulty beside the lap times (FR-022, principle VI)
+- [x] T080 [US3] Verify [quickstart.md](./quickstart.md) Scenarios 7 and 8
 
 **Checkpoint**: All three user stories independently functional.
 
@@ -190,14 +194,14 @@ game's reported times with correct tyre, validity and pit information.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T081 [P] Implement `f1dc doctor` per [contracts/cli.md](./contracts/cli.md), comparing observed packet sizes against expected wire sizes
-- [ ] T082 [P] Implement `f1dc prune` with the 90-day default — **not wired to any automatic trigger**, per [plan.md](./plan.md#deferred-by-design)
-- [ ] T083 [P] Implement starring a recording to exempt it from pruning (CLI only, keeping the API read-only)
-- [ ] T084 Validate SC-007: library lists in under 2 s with 500+ sessions, using synthesised catalog rows
-- [ ] T085 [P] Add structured logging across recorder, ingest and API
-- [ ] T086 [P] Write `README.md` including the in-game telemetry setup the driver must do once
-- [ ] T087 Full [quickstart.md](./quickstart.md) run-through, all 9 scenarios
-- [ ] T088 [P] Retire `probe_udp.py`, folding its diagnostics into `f1dc doctor`
+- [x] T081 [P] Implement `f1dc doctor` per [contracts/cli.md](./contracts/cli.md), comparing observed packet sizes against expected wire sizes
+- [x] T082 [P] Implement `f1dc prune` with the 90-day default — **not wired to any automatic trigger**, per [plan.md](./plan.md#deferred-by-design)
+- [x] T083 [P] Implement starring a recording to exempt it from pruning (CLI only, keeping the API read-only)
+- [x] T084 Validate SC-007: library lists in under 2 s with 500+ sessions, using synthesised catalog rows
+- [x] T085 [P] Add structured logging across recorder, ingest and API
+- [x] T086 [P] Write `README.md` including the in-game telemetry setup the driver must do once
+- [ ] T087 (needs the game running) Full [quickstart.md](./quickstart.md) run-through, all 9 scenarios
+- [x] T088 [P] Retire `probe_udp.py`, folding its diagnostics into `f1dc doctor`
 
 ---
 

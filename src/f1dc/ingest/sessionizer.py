@@ -21,14 +21,14 @@ from datetime import datetime, timedelta
 from f1dc.capture.rawlog import Record
 from f1dc.wire.f1_2023 import UNDECODED_PACKET_IDS
 from f1dc.wire.f1_2023.car_damage import CarDamageCodec, CarDamageData
-from f1dc.wire.f1_2023.car_setups import CarSetupsCodec, CarSetupData
+from f1dc.wire.f1_2023.car_setups import CarSetupData, CarSetupsCodec
 from f1dc.wire.f1_2023.car_status import CarStatusCodec, CarStatusData
 from f1dc.wire.f1_2023.event import EventCodec
 from f1dc.wire.f1_2023.final_classification import (
     FinalClassificationCodec,
     FinalClassificationData,
 )
-from f1dc.wire.f1_2023.lap_data import LapDataCodec, LapData
+from f1dc.wire.f1_2023.lap_data import LapData, LapDataCodec
 from f1dc.wire.f1_2023.session import SessionCodec, SessionData
 from f1dc.wire.f1_2023.session_history import SessionHistoryCodec, SessionHistoryData
 from f1dc.wire.header import decode_header

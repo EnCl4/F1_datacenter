@@ -22,8 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from f1dc.capture.rawlog import RECORD_HEADER, RawLogWriter  # noqa: E402
-from f1dc.wire.header import HEADER_SIZE, decode_header  # noqa: E402
+from f1dc.capture.rawlog import RECORD_HEADER, RawLogWriter
+from f1dc.wire.header import HEADER_SIZE, decode_header
 
 
 def read_legacy(path: Path):

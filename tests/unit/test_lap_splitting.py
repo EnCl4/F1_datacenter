@@ -15,7 +15,6 @@ from f1dc.store import catalog
 from f1dc.wire.f1_2023.lap_data import combine_sector
 from tests.conftest import REFERENCE_LAPS, REFERENCE_UID
 
-
 # ---------------------------------------------------------------- sector recombination
 
 

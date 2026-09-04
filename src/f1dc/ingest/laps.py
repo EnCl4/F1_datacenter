@@ -13,7 +13,6 @@ from f1dc.ingest.sessionizer import LapContext, RawSession
 from f1dc.ingest.validity import best_lap, evaluate
 from f1dc.models import IngestResult, Lap, Session, Stint
 from f1dc.wire.f1_2023 import enums
-from f1dc.wire.f1_2023.session_history import SessionHistoryData
 
 #: Tolerance when checking lap time against the sum of its sectors.
 SECTOR_SUM_TOLERANCE_MS = 5

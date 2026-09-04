@@ -13,9 +13,9 @@ import pytest
 from f1dc.ingest.validity import best_lap, evaluate
 from f1dc.models import (
     EXCLUSION_FIRST_LAP,
+    EXCLUSION_IN_LAP,
     EXCLUSION_INCOMPLETE,
     EXCLUSION_INVALIDATED,
-    EXCLUSION_IN_LAP,
     EXCLUSION_OUT_LAP,
     EXCLUSION_PIT,
     EXCLUSION_SAFETY_CAR,

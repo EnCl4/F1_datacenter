@@ -12,6 +12,7 @@ lost. That is routing, not interpretation.
 
 from __future__ import annotations
 
+import logging
 import queue
 import shutil
 import socket
@@ -32,6 +33,8 @@ from f1dc.capture.status import (
     write_status,
 )
 from f1dc.wire.header import HEADER, HEADER_SIZE
+
+log = logging.getLogger("f1dc.capture")
 
 DEFAULT_PORT = 20777
 RECV_BUFFER = 4096
@@ -235,6 +238,7 @@ class Recorder:
             except TimeoutError:
                 continue
             except OSError:
+                log.debug("socket closed, ending receive loop")
                 break
             try:
                 put((data, monotonic() - base))
@@ -256,6 +260,8 @@ class Recorder:
             try:
                 self._handle(payload, timestamp)
             except OSError:
+                # A disk failure mid-session: stop cleanly so what was captured survives.
+                log.exception("writer failed; stopping capture")
                 self._stop.set()
                 return
 

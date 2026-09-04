@@ -11,13 +11,15 @@ launcher can map them just as easily.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-#: A status file older than this is treated as stopped. A crashed recorder must never
-#: keep appearing to run (http-api.md).
+log = logging.getLogger("f1dc.capture.status")
+
+#: A status file older than this is treated as stopped.
 STALE_AFTER_SECONDS = 10.0
 
 STATE_LISTENING = "listening"
@@ -67,6 +69,7 @@ def write_status(path: Path, status: RecorderStatus) -> None:
     except OSError:
         # Status reporting must never take the recorder down. Losing a status update is
         # cosmetic; losing the session is not.
+        log.debug("could not write status file %s", path, exc_info=True)
         try:
             tmp.unlink(missing_ok=True)
         except OSError:

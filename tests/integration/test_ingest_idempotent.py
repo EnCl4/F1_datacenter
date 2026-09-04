@@ -22,7 +22,6 @@ from f1dc.ingest.pipeline import EXIT_NO_LOGS, run_ingest
 from f1dc.store import catalog, layout
 from tests.conftest import FIXTURE_LOG_NAME, REFERENCE_LAPS, REFERENCE_UID
 
-
 #: The files idempotence is defined over: the interpreted result.
 #:
 #: recordings.parquet is deliberately excluded. It carries provenance -- including

@@ -25,8 +25,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from f1dc.capture.rawlog import RECORD_HEADER, RawLogWriter  # noqa: E402
-from f1dc.wire.header import HEADER_SIZE, decode_header  # noqa: E402
+from f1dc.capture.rawlog import RECORD_HEADER, RawLogWriter
+from f1dc.wire.header import HEADER_SIZE, decode_header
 
 # Periodic sampling intervals in seconds, by packet id. Anything not listed keeps a small
 # fixed number of packets, purely so its codec has real bytes to decode.

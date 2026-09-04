@@ -9,6 +9,7 @@ Runs in its own process. It never executes inside the recorder.
 
 from __future__ import annotations
 
+import logging
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -32,6 +33,8 @@ from f1dc.store.schema import (
     STINT_SCHEMA,
     table_from_rows,
 )
+
+log = logging.getLogger("f1dc.ingest")
 
 EXIT_OK = 0
 EXIT_UNKNOWN_FORMAT = 6
@@ -188,7 +191,7 @@ def run_ingest(
         try:
             ingest_log(paths, log_path, report=report)
             report.logs_processed += 1
-        except Exception as exc:  # noqa: BLE001 - one bad log must not stop the rest
+        except Exception as exc:
             report.errors.append(f"{log_path.name}: {exc}")
             continue
 
