@@ -17,11 +17,18 @@ from pathlib import Path
 
 import pytest
 
-CAPTURE_DIR = Path(__file__).resolve().parents[2] / "src" / "f1dc" / "capture"
+SRC = Path(__file__).resolve().parents[2] / "src"
+CAPTURE_DIR = SRC / "f1dc" / "capture"
 
-# Modules the capture package is permitted to import. Everything here ships with
-# CPython; adding to this list is a constitutional change, not a convenience.
-ALLOWED_FIRST_PARTY = {"f1dc.capture"}
+# Modules the capture package is permitted to import beyond the standard library.
+# Adding to this list is a constitutional change, not a convenience.
+#
+# f1dc.wire.header earns its place: the recorder must read sessionUID to know when to
+# roll to a new file, and packetId/frameIdentifier to count losses. That is reading four
+# fields at fixed offsets, not interpreting a packet -- and duplicating those offsets
+# inside capture/ would risk them drifting from the codecs. header.py is itself
+# standard-library only, which is asserted below.
+ALLOWED_FIRST_PARTY = {"f1dc.capture", "f1dc.wire.header"}
 
 
 def _capture_modules() -> list[Path]:
@@ -61,6 +68,23 @@ def test_capture_imports_stdlib_only(path: Path) -> None:
             offenders.append(f"{module} (third-party)")
 
     assert not offenders, (
-        f"{path.relative_to(CAPTURE_DIR.parents[2])} violates constitution principle II "
+        f"{path.relative_to(SRC)} violates constitution principle II "
         f"-- capture/ must be standard library only. Offending imports: {offenders}"
     )
+
+
+def test_the_one_allowed_first_party_module_is_itself_stdlib_only() -> None:
+    """f1dc.wire.header is on the allowlist, so it inherits the same obligation.
+
+    Without this, the allowlist would be a hole: header.py could grow a pyarrow import
+    and drag it into the capture path.
+    """
+    path = SRC / "f1dc" / "wire" / "header.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+    offenders = [
+        module
+        for module in sorted(_imported_roots(tree))
+        if module.split(".")[0] not in sys.stdlib_module_names
+    ]
+    assert not offenders, f"wire/header.py must stay standard library only: {offenders}"
