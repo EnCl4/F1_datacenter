@@ -61,6 +61,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--port", type=int, default=8420)
     p_serve.add_argument("--open", action="store_true", help="open a browser")
 
+    p_open = sub.add_parser(
+        "open", help="interpret new recordings and open the library in a browser"
+    )
+    _add_common(p_open)
+    p_open.add_argument("--host", default="127.0.0.1")
+    p_open.add_argument("--port", type=int, default=8420)
+
     p_doctor = sub.add_parser("doctor", help="diagnose the setup")
     _add_common(p_doctor)
     p_doctor.add_argument("--port", type=int, default=20777)
@@ -136,6 +143,23 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return serve(paths, host=args.host, port=args.port, open_browser=args.open)
 
 
+def cmd_open(args: argparse.Namespace) -> int:
+    """One action for "let me look at my data": ingest anything new, then serve.
+
+    This is what the Library desktop shortcut runs, so the driver never has to remember
+    that interpreting and viewing are two separate steps.
+    """
+    from f1dc.api.main import serve
+    from f1dc.ingest.pipeline import EXIT_NO_LOGS, run_ingest
+
+    paths = load_paths(args.data_dir, allow_sync_root=args.allow_sync_root)
+
+    code = run_ingest(paths)
+    if code == EXIT_NO_LOGS:
+        print("no recordings yet -- start the recorder and drive a session first")
+    return serve(paths, host=args.host, port=args.port, open_browser=True)
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     from f1dc.cli.doctor import run_doctor
 
@@ -169,6 +193,7 @@ COMMANDS = {
     "launch": cmd_launch,
     "ingest": cmd_ingest,
     "serve": cmd_serve,
+    "open": cmd_open,
     "doctor": cmd_doctor,
     "prune": cmd_prune,
     "star": cmd_star,
