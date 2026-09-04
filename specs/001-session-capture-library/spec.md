@@ -10,21 +10,26 @@
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Sessions Record Themselves (Priority: P1)
+### User Story 1 - One Click Before Playing, Then Forget It (Priority: P1)
 
-The driver launches the game and drives. They do not open the app, do not press a record button, and do not think about the app at all. When they later look, the session is there, complete, with nothing missing.
+Before sitting down to play, the driver performs a single action to start recording. The app immediately and unmistakably tells them it is listening. They then play for as long as they like — one session or ten, practice, qualifying or race — and every one is captured without any further interaction. When they finish, they close it.
 
-**Why this priority**: This is the foundation and the highest-risk part of the whole product. The game broadcasts its telemetry once and never again — there is no replay and no way to recover a session that was not captured. A session missed is lost permanently. Every other feature in the product is built on whatever this story captures, so it must be correct before anything else has value.
+**Why this priority**: This is the foundation and the highest-risk part of the whole product. The game broadcasts its telemetry once and never again — there is no replay and no way to recover a session that was not captured. A session missed is lost permanently. Every other feature is built on whatever this story captures, so it must be correct before anything else has value.
 
-**Independent Test**: Drive any session with the app installed but never interacted with, then confirm a complete recording exists afterwards with a measured data-loss figure. Delivers value on its own: the driver's sessions are being preserved even before any analysis exists.
+Because recording is started deliberately rather than automatically, the cost of forgetting falls on the driver. The design must therefore make starting trivially easy, make the running state obvious at a glance, and make a late start visible rather than silent.
+
+**Independent Test**: Start the recorder with one action, drive several consecutive sessions without touching it again, and confirm each was recorded separately with a measured data-loss figure. Delivers value on its own: sessions are preserved even before any analysis exists.
 
 **Acceptance Scenarios**:
 
-1. **Given** the app has never been opened by the driver, **When** they complete a session in the game, **Then** a complete recording of that session exists afterwards.
-2. **Given** a session is being recorded, **When** the driver returns to the menus and starts a second session, **Then** both sessions are recorded separately and neither is truncated or merged.
-3. **Given** a recording has completed, **When** the driver inspects it, **Then** the proportion of telemetry lost during that session is reported to them.
-4. **Given** the game is not running, **When** the app is active, **Then** it consumes negligible resources and creates no empty recordings.
-5. **Given** the driver is only navigating menus and never enters a session, **When** the app receives that menu activity, **Then** no session appears in the library.
+1. **Given** the recorder is not running, **When** the driver starts it with a single action, **Then** it is listening within a few seconds and states so unambiguously.
+2. **Given** the recorder is listening, **When** the driver completes several sessions in succession, **Then** each is recorded separately, none truncated or merged, with no further interaction.
+3. **Given** the recorder is listening, **When** a session is in progress, **Then** the driver can see which circuit and session type is currently being recorded.
+4. **Given** a recording has completed, **When** the driver inspects it, **Then** the proportion of telemetry lost during that session is reported to them.
+5. **Given** the game is not running, **When** the recorder is listening, **Then** it consumes negligible resources and creates no empty recordings.
+6. **Given** the driver is only navigating menus and never enters a session, **When** the recorder receives that menu activity, **Then** no session appears in the library.
+7. **Given** a session is already under way in the game, **When** the driver starts the recorder late, **Then** they are warned that the earlier part of that session was not captured.
+8. **Given** the recorder is not running at all, **When** the driver opens the library, **Then** it is clearly indicated that nothing is currently being recorded.
 
 ---
 
@@ -69,6 +74,8 @@ The driver opens a single session and sees every lap they drove: the lap time, t
 
 - **A session is interrupted.** The driver quits to the menu mid-session, or the game crashes. The partial recording must remain usable up to the point of interruption and be marked as incomplete rather than discarded or presented as whole.
 - **The driver restarts a session.** A restarted race produces a new session. The abandoned attempt and the restarted one must both be preserved and must not be merged, but the abandoned one must be distinguishable so it does not pollute personal-best figures.
+- **The driver forgets to start the recorder.** That session is lost permanently and cannot be reconstructed — this is the accepted consequence of manual start. The system must not pretend otherwise: it must never present a partially captured session as complete, and it must make its own running state obvious enough that forgetting is unlikely.
+- **The recorder is started midway through a session already in progress.** Whatever remains must still be captured and marked as a partial recording, with the driver told that the earlier portion is missing.
 - **Menu activity arrives that belongs to no session.** This must never produce a library entry.
 - **Two recordings are attempted at once.** If a second recorder is already listening, the situation must be reported clearly rather than silently capturing nothing.
 - **The same recording is processed twice.** Processing a recording again must produce exactly the same result and must never create duplicate sessions in the library.
@@ -84,7 +91,11 @@ The driver opens a single session and sees every lap they drove: the lap time, t
 
 #### Capture
 
-- **FR-001**: System MUST record every session the game broadcasts without the driver starting, stopping, or configuring a recording.
+- **FR-001**: System MUST, once started by the driver, record every session the game broadcasts until the driver stops it, with no further interaction required between sessions.
+- **FR-025**: Users MUST be able to start recording with a single action and no configuration, from the desktop and without using a command line.
+- **FR-026**: System MUST indicate unambiguously and at all times whether it is currently listening, and while a session is in progress MUST show which circuit and session type is being recorded.
+- **FR-027**: System MUST warn the driver when recording is started while a session is already under way, because the earlier part of that session cannot be recovered.
+- **FR-028**: System MUST continue recording across any number of consecutive sessions within one run, without requiring the driver to restart or reconfigure it.
 - **FR-002**: System MUST preserve the complete, unmodified telemetry stream of every session, including any information the system cannot currently interpret.
 - **FR-003**: System MUST measure and report the proportion of telemetry lost during each session.
 - **FR-004**: System MUST record sessions to a location outside any cloud-synchronised folder by default, and MUST allow that location to be changed.
@@ -114,6 +125,7 @@ The driver opens a single session and sees every lap they drove: the lap time, t
 - **FR-022**: System MUST display the comparability context — assists, weather, temperatures, difficulty, fuel and tyre state — alongside any lap time it presents.
 - **FR-023**: System MUST visibly mark sessions that were recorded incompletely or with significant data loss.
 - **FR-024**: System MUST NOT present a lap time as a personal best when that lap did not count or came from an abandoned session.
+- **FR-029**: System MUST indicate in the library when recording is not currently running, so the driver is never misled into believing a session is being captured when it is not.
 
 ### Key Entities
 
@@ -128,7 +140,8 @@ The driver opens a single session and sees every lap they drove: the lap time, t
 
 ### Measurable Outcomes
 
-- **SC-001**: A driver can complete a full game session without interacting with the app in any way, and find that session in their library within one minute of leaving it.
+- **SC-001**: A driver can start recording in a single action, in under 5 seconds, and then complete any number of consecutive sessions without touching the app again — finding each in their library within one minute of leaving it.
+- **SC-010**: A driver can tell whether recording is currently active within 2 seconds of looking, without navigating anywhere or interpreting logs.
 - **SC-002**: Under normal operation, fewer than 0.1% of telemetry frames are lost in a recorded session.
 - **SC-003**: 100% of lap times and sector times shown in the app match the times the game itself reported for those laps.
 - **SC-004**: A driver can locate a specific past session, given the circuit and roughly when it happened, in under 15 seconds.
@@ -150,6 +163,12 @@ The driver opens a single session and sees every lap they drove: the lap time, t
 - **A previously captured five-lap race recording exists** and serves as the reference fixture for validating interpretation (constitution principle IV).
 - **Restarted sessions are recorded separately.** The abandoned attempt is preserved but flagged so it does not contribute to personal bests.
 
-## Outstanding Clarification
+## Resolved Decisions
 
-- **FR-001 and SC-001 depend on this**: The requirement that sessions record themselves without driver interaction implies something is always listening. How that "always" is achieved is a genuine product decision with different trade-offs, and no default is clearly correct: [NEEDS CLARIFICATION: Should the recorder start automatically with Windows and run continuously in the background, or should the driver launch it once per sitting?]
+- **Recorder lifecycle (resolved 2026-09-04)**: The recorder is **started manually by the driver**, once per sitting, and runs until they close it. It does **not** start with Windows and does not run continuously in the background.
+
+  *Alternatives considered*: automatic start with Windows (never misses a session, but always running); a watcher that starts it when the game launches (still requires an always-on process, with more moving parts).
+
+  *Accepted trade-off*: a session driven before the recorder is started cannot be recovered, because the game broadcasts its telemetry only once. This risk is accepted deliberately in exchange for nothing running unless the driver wants it to.
+
+  *Consequent requirements*: because the driver bears the cost of forgetting, the design must reduce both the chance and the cost of it — FR-025 (single action to start), FR-026 (state visible at a glance), FR-027 (warn on a late start), FR-028 (one start covers a whole sitting), FR-029 (library shows when nothing is recording), and SC-010 (state readable within 2 seconds).
