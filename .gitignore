@@ -1,0 +1,29 @@
+# --- telemetry captures: NEVER commit, these are GB-scale ---
+*.bin
+*.bin.zst
+*.parquet
+*.duckdb
+data/
+raw/
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# --- node / frontend ---
+node_modules/
+dist/
+build/
+.vite/
+
+# --- os / editor ---
+Thumbs.db
+desktop.ini
+.DS_Store
+.idea/
+.vscode/
