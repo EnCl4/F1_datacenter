@@ -120,7 +120,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         paths,
         explicit=args.paths or None,
         force=args.force,
-        compress=not args.no_compress,
+        compress_logs=not args.no_compress,
     )
 
 

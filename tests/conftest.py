@@ -78,6 +78,35 @@ def player_index(by_packet_id: dict[int, list[Record]]) -> int:
     return decode_header(by_packet_id[1][0].payload).player_car_index
 
 
+#: The synthetic capture filename ingest parses timestamps out of.
+FIXTURE_LOG_NAME = "2026-09-04T11-04-12_15975277775803518192.f1raw"
+REFERENCE_UID = "15975277775803518192"
+
+#: Ground-truth lap times for the reference race, from SessionHistory.
+REFERENCE_LAPS = {1: 76859, 2: 71439, 3: 79146, 4: 90600, 5: 72642}
+
+
+@pytest.fixture(scope="session")
+def ingested(tmp_path_factory, fixture_path: Path):
+    """A derived store built from the committed fixture.
+
+    Note the fixture is deliberately subsampled, so its measured packet loss is very high.
+    That is honest -- frames really are missing from it -- so tests assert on lap content
+    rather than on loss figures.
+    """
+    import shutil
+
+    from f1dc.config import Paths
+    from f1dc.ingest.pipeline import run_ingest
+
+    root = tmp_path_factory.mktemp("derived-store")
+    paths = Paths(root)
+    paths.ensure()
+    shutil.copy(fixture_path, paths.raw_dir / FIXTURE_LOG_NAME)
+    run_ingest(paths, compress_logs=False)
+    return paths
+
+
 def first_of(by_packet_id: dict[int, list[Record]], packet_id: int) -> bytes:
     payloads = by_packet_id.get(packet_id)
     if not payloads:

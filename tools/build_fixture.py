@@ -79,6 +79,36 @@ def status_state(buf: bytes) -> tuple | None:
         return None
 
 
+def find_final_state(source: Path) -> set[int]:
+    """Record indices that must survive subsampling whatever else happens.
+
+    The last SessionHistory packet for each car carries that car's COMPLETE lap history --
+    including the final lap, whose time only appears once the lap is finished. Periodic
+    sampling will usually miss it, leaving the last lap of every session looking
+    incomplete. The same applies to the final LapData and CarStatus.
+    """
+    last_history: dict[int, int] = {}
+    last_lap_data = -1
+    last_status = -1
+
+    for index, (_ts, payload) in enumerate(read_legacy(source)):
+        if len(payload) < HEADER_SIZE:
+            continue
+        hdr = decode_header(payload)
+        if hdr.session_uid == 0:
+            continue
+        if hdr.packet_id == 11 and len(payload) > HEADER_SIZE:
+            last_history[payload[HEADER_SIZE]] = index
+        elif hdr.packet_id == 2:
+            last_lap_data = index
+        elif hdr.packet_id == 7:
+            last_status = index
+
+    forced = set(last_history.values())
+    forced.update(i for i in (last_lap_data, last_status) if i >= 0)
+    return forced
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("source", type=Path)
@@ -89,6 +119,9 @@ def main() -> int:
 
     if not args.legacy_probe:
         raise SystemExit("only --legacy-probe sources are supported today")
+
+    forced = find_final_state(args.source)
+    print(f"pass 1: {len(forced)} end-of-session packets pinned")
 
     last_sample: dict[int, float] = {}
     codec_samples: Counter[int] = Counter()
@@ -103,18 +136,20 @@ def main() -> int:
     writer = RawLogWriter(args.dest, args.port)
     writer.open()
     try:
-        for ts, payload in read_legacy(args.source):
+        for index, (ts, payload) in enumerate(read_legacy(args.source)):
             if len(payload) < HEADER_SIZE:
                 continue
             hdr = decode_header(payload)
             pid = hdr.packet_id
             seen[pid] += 1
 
-            keep = False
+            keep = index in forced
 
             # Menu-state traffic: keep it all. The ingest must be tested on the fact that
             # sessionUID == 0 exists and must be discarded (FR-007).
-            if hdr.session_uid == 0:
+            if keep:
+                pass
+            elif hdr.session_uid == 0:
                 keep = True
                 uid_zero_kept += 1
             elif pid in KEEP_ALL:
