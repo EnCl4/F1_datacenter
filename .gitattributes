@@ -1,0 +1,13 @@
+# Normalise line endings in the repository; check out native on Windows.
+* text=auto
+
+# Windows-native scripts must keep CRLF.
+*.ps1  text eol=crlf
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+
+# Telemetry captures and columnar stores are binary (also gitignored).
+*.bin      binary
+*.zst      binary
+*.parquet  binary
+*.duckdb   binary
