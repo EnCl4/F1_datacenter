@@ -1,6 +1,11 @@
 # --- telemetry captures: NEVER commit, these are GB-scale ---
 *.bin
 *.bin.zst
+*.f1raw
+*.f1raw.zst
+# ...except the curated test fixture, which is real bytes under 5 MB and is
+# required by constitution principle IV (see specs/.../research.md R11).
+!tests/fixtures/*.f1raw
 *.parquet
 *.duckdb
 data/

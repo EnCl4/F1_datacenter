@@ -23,7 +23,7 @@ One captured raw log. The permanent record.
 | `captured_at` | timestamp | UTC, wall-clock at first datagram |
 | `size_bytes` | int64 | On-disk size |
 | `packets_received` | int64 | Datagrams written |
-| `frames_lost` | int64 | From `frameIdentifier` gaps (FR-003) |
+| `frames_lost` | int64 | From `frameIdentifier` gaps, **excluding zero-frame packets** (see below) |
 | `loss_pct` | double | `frames_lost / frames_expected × 100` |
 | `queue_high_water` | int32 | Peak writer-queue depth; non-zero means disk pressure |
 | `packet_format` | int32 | 2023 |
@@ -71,12 +71,25 @@ through `ingested` without touching the raw file.
 
 ### Assist configuration (embedded in Session)
 
-`assist_steering`, `assist_braking`, `assist_gearbox`, `assist_pit`, `assist_pit_release`,
-`assist_ers`, `assist_drs`, `assist_racing_line`, `assist_racing_line_type` — all `int8`,
-plus a derived `assists_summary` string for display.
+**Sourced from two packets, not one.** This was found during implementation by decoding
+real bytes, and getting it wrong would have quietly misreported how every lap was set.
 
-These are **not optional metadata**. Constitution principle VI makes them part of every lap
-time's comparability context, because they change achievable lap times outright.
+From the **Session** packet: `assist_steering`, `assist_braking`, `assist_gearbox`,
+`assist_pit`, `assist_pit_release`, `assist_ers`, `assist_drs`, `assist_racing_line`,
+`assist_racing_line_type`.
+
+From the **CarStatus** packet: `assist_traction_control` (0–2), `assist_anti_lock_brakes`
+(0–1). **These do not appear in the Session packet at all.**
+
+All `int8`, plus a derived `assists_summary` string for display.
+
+The reference capture demonstrates why this matters: its Session packet reports braking
+assist off, which alone reads as "no braking aids" — while CarStatus reports traction
+control on full and ABS enabled. A summary built from the Session packet alone would
+label those laps "no assists" and invite comparison against genuinely assist-free laps,
+which is exactly the failure constitution principle VI exists to prevent.
+
+These are **not optional metadata**. They change achievable lap times outright.
 
 ---
 
@@ -130,6 +143,20 @@ Sourced primarily from `SessionHistory.m_tyreStintsHistoryData`, cross-checked a
 
 These are the rules most likely to be got wrong, so they are stated once here and tested
 directly (constitution principle IV).
+
+### Frame counters reset to zero at session end
+
+The Event, SessionHistory and FinalClassification packets sent as a session closes report
+`frameIdentifier == 0` **and** `overallFrameIdentifier == 0`, despite arriving at
+`sessionTime` ≈ 391 s — long after frame 42 511.
+
+The packet-loss metric counts gaps in frame identifiers, so packets without a frame
+counter must be excluded from it. Counting them would report a phantom 42 000-frame loss
+at the end of every single session, making SC-002 unmeasurable and marking every session
+incomplete under FR-023.
+
+Found during implementation against real bytes; `PacketHeader.has_frame_counter` is the
+guard, and `test_end_of_session_packets_carry_no_frame_counter` pins the behaviour.
 
 ### Sector time recombination
 

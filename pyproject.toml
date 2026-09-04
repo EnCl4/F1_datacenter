@@ -1,0 +1,78 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "f1dc"
+version = "0.1.0"
+description = "F1 Data Center - capture, interpret and browse F1 23 telemetry sessions"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+
+# NOTE: nothing here is imported by src/f1dc/capture/, which is standard-library
+# only by constitutional requirement (principle II). See tests/contract/test_capture_isolation.py.
+dependencies = [
+    "pyarrow>=17",
+    "duckdb>=1.1",
+    "zstandard>=0.23",
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-timeout>=2.3",
+    "ruff>=0.7",
+]
+
+[project.scripts]
+f1dc = "f1dc.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/f1dc"]
+
+# ---------------------------------------------------------------------------
+# Lint / format
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "UP",       # pyupgrade
+    "B",        # bugbear
+    "TID",      # tidy-imports
+    "RUF",
+]
+ignore = ["E501"]  # line length is handled by the formatter
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+# The capture package must not import from the rest of f1dc either -- it is a
+# leaf. Third-party isolation is enforced by test_capture_isolation.py, which can
+# express "standard library only" in a way ruff configuration cannot.
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+timeout = 120
+markers = [
+    "needs_full_capture: requires the full calibration capture, skipped when absent",
+    "slow: end-to-end tests over large inputs",
+]
+filterwarnings = ["error::DeprecationWarning"]
