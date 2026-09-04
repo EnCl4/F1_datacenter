@@ -70,7 +70,7 @@ Ordered by `started_at` descending — most recent first, per FR-018.
       "air_temp_c": 24,
       "track_temp_c": 31,
       "ai_difficulty": 90,
-      "assists_summary": "no assists, manual gearbox",
+      "assists_summary": "TC full, ABS, manual gearbox",
       "ended_naturally": true,
       "end_reason": "chequered",
       "started_late": false,
@@ -103,8 +103,9 @@ every assist individually, not just the summary string.
   "conditions": { "weather_name": "overcast", "air_temp_c": 24, "track_temp_c": 31 },
   "assists": {
     "steering": 0, "braking": 0, "gearbox": 1, "pit": 0,
-    "pit_release": 0, "ers": 0, "drs": 0,
-    "racing_line": 0, "racing_line_type": 0
+    "pit_release": 1, "ers": 0, "drs": 0,
+    "racing_line": 0, "racing_line_type": 0,
+    "traction_control": 2, "anti_lock_brakes": 1
   },
   "ai_difficulty": 90,
   "recording": {

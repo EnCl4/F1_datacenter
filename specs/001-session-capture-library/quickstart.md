@@ -142,7 +142,8 @@ pytest tests/integration --raw C:/F1Data/raw/calibration.bin
 ```
 
 **Expected**, from the known-good reference race — Interlagos, Race, 5 laps, overcast,
-31 °C track, 24 °C air, AI 90, all assists off, manual gearbox:
+31 °C track, 24 °C air, AI 90, manual gearbox, no steering or braking assist, pit-release
+assist on, **traction control full and ABS on**:
 
 | Lap | Time | Note |
 |---:|---|---|
