@@ -18,23 +18,26 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+from f1dc.capture.loss import LossMeter
 from f1dc.capture.rawlog import Record
+from f1dc.ingest.traces import TraceBuilder
 from f1dc.wire.f1_2023 import UNDECODED_PACKET_IDS
 from f1dc.wire.f1_2023.car_damage import CarDamageCodec, CarDamageData
 from f1dc.wire.f1_2023.car_setups import CarSetupData, CarSetupsCodec
 from f1dc.wire.f1_2023.car_status import CarStatusCodec, CarStatusData
+from f1dc.wire.f1_2023.car_telemetry import CarTelemetryCodec
 from f1dc.wire.f1_2023.event import EventCodec
 from f1dc.wire.f1_2023.final_classification import (
     FinalClassificationCodec,
     FinalClassificationData,
 )
 from f1dc.wire.f1_2023.lap_data import LapData, LapDataCodec
+from f1dc.wire.f1_2023.motion import MotionCodec
 from f1dc.wire.f1_2023.session import SessionCodec, SessionData
 from f1dc.wire.f1_2023.session_history import SessionHistoryCodec, SessionHistoryData
 from f1dc.wire.header import decode_header
 from f1dc.wire.registry import Registry, default_registry
 
-LOSS_REFERENCE_PACKET = 2
 LATE_START_LAP = 1
 LATE_START_SECONDS = 30.0
 
@@ -102,9 +105,7 @@ class RawSession:
     first_offset: float = 0.0
     last_offset: float = 0.0
 
-    first_frame: int | None = None
-    last_frame: int | None = None
-    frames_lost: int = 0
+    loss: LossMeter = field(default_factory=LossMeter)
 
     started_late: bool = False
     menu_records: int = 0
@@ -116,16 +117,16 @@ class RawSession:
     game_version: str = ""
     packet_format: int = 0
 
+    traces: TraceBuilder = field(default_factory=TraceBuilder)
+    """Per-metre lap traces (feature 002), fed frame by frame."""
+
     @property
-    def frames_expected(self) -> int:
-        if self.first_frame is None or self.last_frame is None:
-            return 0
-        return max(0, self.last_frame - self.first_frame + 1)
+    def frames_lost(self) -> int:
+        return round(self.loss.frames_lost)
 
     @property
     def loss_pct(self) -> float:
-        expected = self.frames_expected
-        return 100.0 * self.frames_lost / expected if expected else 0.0
+        return self.loss.loss_pct
 
     @property
     def duration_s(self) -> float:
@@ -226,8 +227,14 @@ class Sessionizer:
         session.last_time = max(session.last_time or 0.0, header.session_time)
 
         pid = header.packet_id
+        if header.has_frame_counter:
+            session.loss.observe(pid, header.frame_identifier)
         if pid == 2:
             self._on_lap_data(session, payload, header)
+        elif pid == 0:
+            self._on_motion(session, payload, header)
+        elif pid == 6:
+            self._on_telemetry(session, payload, header)
         elif pid == 1:
             self._on_session(session, payload)
         elif pid == 7:
@@ -254,20 +261,16 @@ class Sessionizer:
 
     def _on_lap_data(self, session: RawSession, payload: bytes, header) -> None:
         has_frame = header.has_frame_counter
-        if has_frame:
-            if session.first_frame is None:
-                session.first_frame = header.frame_identifier
-            elif (
-                session.last_frame is not None
-                and header.frame_identifier > session.last_frame + 1
-            ):
-                session.frames_lost += header.frame_identifier - session.last_frame - 1
-            session.last_frame = header.frame_identifier
 
         lap = LapDataCodec.decode_car(payload, session.player_index)
         number = lap.current_lap_num
         if number <= 0:
             return
+        if has_frame:
+            session.traces.on_lap_data(
+                header.frame_identifier, number, lap.lap_distance,
+                lap.current_lap_time_ms, lap.sector,
+            )
 
         if not session.laps:
             session.started_late = (
@@ -316,6 +319,24 @@ class Sessionizer:
             ctx.sector1_from_lapdata = lap.sector1_ms
         if lap.sector2_ms:
             ctx.sector2_from_lapdata = lap.sector2_ms
+
+    def _on_motion(self, session: RawSession, payload: bytes, header) -> None:
+        if not header.has_frame_counter:
+            return
+        m = MotionCodec.decode_car(payload, session.player_index)
+        session.traces.on_motion(
+            header.frame_identifier, m.g_force_lateral, m.g_force_longitudinal,
+            m.world_position_x, m.world_position_z,
+        )
+
+    def _on_telemetry(self, session: RawSession, payload: bytes, header) -> None:
+        if not header.has_frame_counter:
+            return
+        t = CarTelemetryCodec.decode_car(payload, session.player_index)
+        session.traces.on_telemetry(
+            header.frame_identifier, t.speed_kph, t.throttle, t.brake, t.steer,
+            t.gear, t.engine_rpm, t.drs,
+        )
 
     def _on_car_status(self, session: RawSession, payload: bytes) -> None:
         status: CarStatusData = CarStatusCodec.decode_car(payload, session.player_index)

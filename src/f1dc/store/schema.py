@@ -115,6 +115,32 @@ LAP_SCHEMA = pa.schema(
         ("corner_cutting_warnings", pa.int16()),
         ("sector_sum_mismatch", pa.bool_()),
         ("history_mismatch", pa.bool_()),
+        # Track distance where sectors 2 and 3 begin (feature 002, FR-013). Measured on the
+        # reference race: 1 167.5-1 168.4 m and 3 113.3-3 114.3 m across laps.
+        ("sector2_start_m", pa.float32()),
+        ("sector3_start_m", pa.float32()),
+    ]
+)
+
+# Per-metre lap traces (feature 002). Every channel is null inside a recording gap, so a
+# gap reads as missing data rather than as a flat line at zero.
+TRACE_SCHEMA = pa.schema(
+    [
+        ("session_uid", pa.string()),
+        ("lap_number", pa.int32()),
+        ("distance_m", pa.int32()),
+        ("time_ms", pa.float32()),
+        ("speed_kph", pa.float32()),
+        ("throttle", pa.float32()),
+        ("brake", pa.float32()),
+        ("steer", pa.float32()),
+        ("gear", pa.float32()),
+        ("rpm", pa.float32()),
+        ("drs", pa.float32()),
+        ("g_lat", pa.float32()),
+        ("g_lon", pa.float32()),
+        ("x", pa.float32()),
+        ("z", pa.float32()),
     ]
 )
 

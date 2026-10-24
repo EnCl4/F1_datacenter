@@ -204,9 +204,16 @@ def build_laps(raw: RawSession, session_uid: str, stints: list[Stint]) -> list[L
                 corner_cutting_warnings=ctx.corner_cutting_warnings,
                 sector_sum_mismatch=sector_mismatch,
                 history_mismatch=history_mismatch,
+                sector2_start_m=_sector_start(raw, number, 0),
+                sector3_start_m=_sector_start(raw, number, 1),
             )
         )
     return laps
+
+
+def _sector_start(raw: RawSession, lap_number: int, index: int) -> float | None:
+    starts = raw.traces.sector_starts(lap_number)
+    return starts[index] if index < len(starts) else None
 
 
 def build(raw: RawSession, recording_id: str) -> IngestResult:

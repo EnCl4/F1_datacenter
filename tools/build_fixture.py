@@ -40,6 +40,14 @@ SAMPLE_INTERVAL = {
     12: 10.0,  # TyreSets
 }
 KEEP_ALL = {3, 8}  # Event, FinalClassification
+
+# Feature 002 (research R10): two laps whose traces tests can actually reconstruct. Every
+# 10th frame of LapData, Motion and CarTelemetry -- all three share a frame number, so a
+# kept frame is always a complete triple. ~8 m between samples at 328 km/h, comfortably
+# under the 25 m gap threshold. Two full-rate laps would be 61 MB.
+TRACE_LAPS = {2, 5}
+TRACE_PACKETS = {0, 2, 6}
+TRACE_FRAME_STRIDE = 10
 CODEC_SAMPLE_COUNT = 20  # Motion, Participants, CarTelemetry, MotionEx
 
 
@@ -127,6 +135,8 @@ def main() -> int:
     codec_samples: Counter[int] = Counter()
     prev_lap: tuple | None = None
     prev_status: tuple | None = None
+    current_lap = 0
+    trace_kept = 0
 
     kept: Counter[int] = Counter()
     seen: Counter[int] = Counter()
@@ -145,10 +155,20 @@ def main() -> int:
 
             keep = index in forced
 
+            if pid == 2 and hdr.session_uid != 0 and (state := lap_state(payload)):
+                current_lap = state[1]  # currentLapNum, read before the keep decision
+
             # Menu-state traffic: keep it all. The ingest must be tested on the fact that
             # sessionUID == 0 exists and must be discarded (FR-007).
             if keep:
                 pass
+            elif (
+                pid in TRACE_PACKETS
+                and current_lap in TRACE_LAPS
+                and hdr.frame_identifier % TRACE_FRAME_STRIDE == 0
+            ):
+                keep = True
+                trace_kept += 1
             elif hdr.session_uid == 0:
                 keep = True
                 uid_zero_kept += 1
@@ -180,6 +200,7 @@ def main() -> int:
     print(f"wrote {args.dest}  ({size / 1e6:.2f} MB, {writer.records_written} records)")
     print(f"  kept because something changed: {change_kept}")
     print(f"  sessionUID == 0 records kept:   {uid_zero_kept}")
+    print(f"  trace frames kept (laps {sorted(TRACE_LAPS)}): {trace_kept}")
     print()
     print(f"  {'id':<4}{'seen':>9}{'kept':>9}")
     for pid in sorted(seen):
@@ -189,8 +210,8 @@ def main() -> int:
     if missing:
         print(f"\n  WARNING: packet ids present in source but absent from fixture: {missing}")
         return 1
-    if size > 5 * 1024 * 1024:
-        print(f"\n  WARNING: fixture is {size / 1e6:.1f} MB, over the 5 MB budget")
+    if size > 10 * 1024 * 1024:
+        print(f"\n  WARNING: fixture is {size / 1e6:.1f} MB, over the 10 MB budget")
         return 1
     return 0
 

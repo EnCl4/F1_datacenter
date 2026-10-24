@@ -189,6 +189,10 @@ class Lap:
     history_mismatch: bool = False
     """True when the time derived from LapData disagrees with SessionHistory."""
 
+    sector2_start_m: float | None = None
+    sector3_start_m: float | None = None
+    """Where sectors 2 and 3 begin on track, for chart markers (feature 002)."""
+
     def to_row(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -199,3 +203,5 @@ class IngestResult:
     stints: list[Stint] = field(default_factory=list)
     laps: list[Lap] = field(default_factory=list)
     recording: Recording | None = None
+    traces: dict[str, list] | None = None
+    """Columnar per-metre lap traces (feature 002), or None if no lap had channel data."""

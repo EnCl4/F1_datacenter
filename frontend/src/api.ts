@@ -87,10 +87,111 @@ export interface TrackRow {
   session_count: number;
 }
 
+/** One column per channel; null marks a recording gap (never interpolated). */
+export interface TraceChannels {
+  distance_m: number[];
+  time_ms: (number | null)[];
+  speed_kph: (number | null)[];
+  throttle: (number | null)[];
+  brake: (number | null)[];
+  steer: (number | null)[];
+  gear: (number | null)[];
+  rpm: (number | null)[];
+  drs: (number | null)[];
+  g_lat: (number | null)[];
+  g_lon: (number | null)[];
+  x: (number | null)[];
+  z: (number | null)[];
+}
+
+export type ChannelKey = keyof TraceChannels;
+
+export interface LapTrace {
+  session_uid: string;
+  lap_number: number;
+  track_id: number;
+  track_length_m: number;
+  lap_time_ms: number | null;
+  counts: boolean;
+  exclusion_reason: string | null;
+  /** Distances where sectors 2 and 3 begin. */
+  sectors_m: number[];
+  channels: TraceChannels;
+}
+
+export interface GapSeries {
+  distance_m: number[];
+  /** Positive = the compared lap is behind the reference at that distance. */
+  gap_ms: (number | null)[];
+}
+
+export interface LapContext {
+  assists_summary: string | null;
+  tyre: string | null;
+  tyre_age_laps: number | null;
+  weather_name: string | null;
+  track_temp_c: number | null;
+  ai_difficulty: number | null;
+  fuel_in_tank_start: number | null;
+}
+
+export interface CompareContext {
+  lap: LapContext;
+  reference: LapContext;
+  /** Names of the LapContext fields whose values differ between the two laps. */
+  differs: string[];
+}
+
+export interface CompareResult {
+  lap: LapTrace;
+  reference: LapTrace;
+  gap: GapSeries;
+  context: CompareContext;
+}
+
+export interface PaceLap {
+  lap_number: number;
+  lap_time_ms: number | null;
+  counts: boolean;
+  exclusion_reason: string | null;
+  stint_index: number | null;
+  tyre_visual_compound_name: string;
+}
+
+export interface PaceStint {
+  stint_index: number;
+  start_lap: number;
+  end_lap: number | null;
+  tyre_visual_compound_name: string;
+}
+
+export interface PaceData {
+  laps: PaceLap[];
+  stints: PaceStint[];
+}
+
+export interface TrackLapRow {
+  session_uid: string;
+  started_at: string;
+  session_type_name: string;
+  lap_number: number;
+  lap_time_ms: number | null;
+  counts: boolean;
+  exclusion_reason: string | null;
+  has_trace: boolean;
+}
+
+/**
+ * Errors arrive as {error:{code,message}}. The message is already written for the
+ * user (e.g. which two circuits differ, or why a trace is missing), so it is surfaced
+ * verbatim rather than being reworded here.
+ */
 async function get<T>(path: string): Promise<T> {
   const response = await fetch(`/api${path}`);
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
+    const body = (await response.json().catch(() => null)) as {
+      error?: { code?: string; message?: string };
+    } | null;
     throw new Error(body?.error?.message ?? `request failed: ${response.status}`);
   }
   return response.json() as Promise<T>;
@@ -106,6 +207,16 @@ export const api = {
   session: (uid: string) => get<SessionDetail>(`/sessions/${uid}`),
   laps: (uid: string) => get<{ items: LapRow[] }>(`/sessions/${uid}/laps`),
   stints: (uid: string) => get<{ items: StintRow[] }>(`/sessions/${uid}/stints`),
+  trace: (uid: string, lap: number) => get<LapTrace>(`/sessions/${uid}/laps/${lap}/trace`),
+  /** Refs use the "sessionUid:lapNumber" form. Omit the reference for the session's best counting lap. */
+  compare: (lapRef: string, referenceRef?: string) => {
+    const params = new URLSearchParams({ lap: lapRef });
+    if (referenceRef) params.set("reference", referenceRef);
+    return get<CompareResult>(`/compare?${params.toString()}`);
+  },
+  pace: (uid: string) => get<PaceData>(`/sessions/${uid}/pace`),
+  lapsAtTrack: (trackId: number) =>
+    get<{ items: TrackLapRow[] }>(`/laps?track_id=${encodeURIComponent(String(trackId))}`),
 };
 
 /** Lap times are read constantly and compared by eye, so format them consistently. */

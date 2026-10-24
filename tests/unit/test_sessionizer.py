@@ -38,7 +38,7 @@ def test_deliberately_undecoded_packets_are_not_reported_as_unknown(fixture_path
     sessionizer = Sessionizer(datetime(2026, 9, 4, tzinfo=UTC))
     sessionizer.feed(iter_records(fixture_path))
     assert sum(sessionizer.unknown.values()) == 0, dict(sessionizer.unknown)
-    assert set(sessionizer.declared_undecoded) == {0, 4, 6, 13}
+    assert set(sessionizer.declared_undecoded) == {4, 13}
 
 
 def test_the_race_ended_at_the_chequered_flag(fixture_path) -> None:

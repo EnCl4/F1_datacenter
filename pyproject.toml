@@ -13,6 +13,7 @@ license = { text = "MIT" }
 # NOTE: nothing here is imported by src/f1dc/capture/, which is standard-library
 # only by constitutional requirement (principle II). See tests/contract/test_capture_isolation.py.
 dependencies = [
+    "numpy>=2.0",
     "pyarrow>=17",
     "duckdb>=1.1",
     "zstandard>=0.23",

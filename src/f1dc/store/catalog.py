@@ -13,6 +13,7 @@ file that ingest never writes, so starring a session cannot make ingest non-idem
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -222,3 +223,39 @@ def stored_ingest_versions(paths: Paths) -> dict[str, str]:
 
 def find_path(paths: Paths, session_uid: str) -> Path:
     return layout.session_dir(paths, session_uid)
+
+
+# ---------------------------------------------------------------------------- traces
+
+_TRACE_KEY_COLUMNS = ("session_uid", "lap_number")
+
+
+def get_trace(paths: Paths, session_uid: str, lap_number: int) -> dict[str, list] | None:
+    """One lap's per-metre trace, columnar: column name -> values in distance order.
+
+    Reads only this session's traces file. Float NaNs (a recording gap) come back as None.
+    """
+    parquet = layout.traces_parquet(paths, session_uid)
+    if not parquet.exists():
+        return None
+    source = parquet.as_posix().replace("'", "''")
+    with duckdb.connect(":memory:") as con:
+        cursor = con.execute(
+            f"SELECT * FROM read_parquet('{source}') WHERE lap_number = ? ORDER BY distance_m",
+            [lap_number],
+        )
+        columns = [d[0] for d in cursor.description]
+        rows = cursor.fetchall()
+    if not rows:
+        return None
+
+    keep = [c for c in columns if c not in _TRACE_KEY_COLUMNS]
+    trace: dict[str, list] = {name: [] for name in keep}
+    for row in rows:
+        record = dict(zip(columns, row, strict=True))
+        for name in keep:
+            value = record[name]
+            if isinstance(value, float) and math.isnan(value):
+                value = None
+            trace[name].append(value)
+    return trace

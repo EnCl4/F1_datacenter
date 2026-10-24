@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from f1dc.capture.loss import LossMeter
 from f1dc.capture.rawlog import RawLogWriter
 from f1dc.capture.status import (
     STATE_ERROR,
@@ -51,9 +52,8 @@ EXIT_DISK_SPACE = 5
 MIN_FREE_BYTES = 5 * 1024**3
 WARN_FREE_BYTES = 15 * 1024**3
 
-#: Packet id whose frame identifiers are counted for the loss metric. LapData is sent at
-#: the configured send rate, so gaps in it are gaps in the stream.
-LOSS_REFERENCE_PACKET = 2
+#: LapData: the packet the recorder reads the current lap from.
+LAP_DATA_PACKET = 2
 
 #: A session whose first observed lap is beyond this, or whose session clock is already
 #: past LATE_START_SECONDS, was already running when we started (FR-027).
@@ -82,9 +82,9 @@ class SessionRecord:
     started_at: float
     packets: int = 0
     bytes: int = 0
-    first_frame: int | None = None
-    last_frame: int | None = None
-    frames_lost: int = 0
+    loss: LossMeter = field(default_factory=LossMeter)
+    """Send-rate-independent loss measurement; see capture/loss.py."""
+
     started_late: bool = False
     current_lap: int = 0
     track_id: int = -1
@@ -92,17 +92,12 @@ class SessionRecord:
     menu_records: int = 0
 
     @property
-    def frames_expected(self) -> int:
-        if self.first_frame is None or self.last_frame is None:
-            return 0
-        return max(0, self.last_frame - self.first_frame + 1)
+    def frames_lost(self) -> float:
+        return self.loss.frames_lost
 
     @property
     def loss_pct(self) -> float:
-        expected = self.frames_expected
-        if expected <= 0:
-            return 0.0
-        return 100.0 * self.frames_lost / expected
+        return self.loss.loss_pct
 
 
 @dataclass
@@ -304,27 +299,14 @@ class Recorder:
         self.total_packets += 1
         self.total_bytes += len(payload)
 
+        # Packets sent as a session closes carry zeroed frame counters; they are not frames.
         has_frame = not (frame_id == 0 and overall_frame == 0)
-        if packet_id == LOSS_REFERENCE_PACKET and has_frame:
-            self._account_frames(frame_id)
+        if has_frame:
+            self.current.loss.observe(packet_id, frame_id)
+        if packet_id == LAP_DATA_PACKET and has_frame:
             self._track_lap(payload, player_index, session_time)
         elif packet_id == 1:
             self._track_session_meta(payload)
-
-    def _account_frames(self, frame_id: int) -> None:
-        """Count gaps in the reference packet's frame identifiers (FR-003).
-
-        Packets whose frame counters are zeroed -- which the game does for the packets it
-        sends as a session closes -- are excluded by the caller. Counting them would
-        report a phantom loss of every frame in the session.
-        """
-        cur = self.current
-        assert cur is not None
-        if cur.first_frame is None:
-            cur.first_frame = frame_id
-        elif cur.last_frame is not None and frame_id > cur.last_frame + 1:
-            cur.frames_lost += frame_id - cur.last_frame - 1
-        cur.last_frame = frame_id
 
     def _track_lap(self, payload: bytes, player_index: int, session_time: float) -> None:
         cur = self.current

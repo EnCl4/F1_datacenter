@@ -23,7 +23,7 @@ One captured raw log. The permanent record.
 | `captured_at` | timestamp | UTC, wall-clock at first datagram |
 | `size_bytes` | int64 | On-disk size |
 | `packets_received` | int64 | Datagrams written |
-| `frames_lost` | int64 | From `frameIdentifier` gaps, **excluding zero-frame packets** (see below) |
+| `frames_lost` | int64 | Incomplete frames plus scaled bursts -- **not** raw `frameIdentifier` gaps (see *Measuring loss* below) |
 | `loss_pct` | double | `frames_lost / frames_expected × 100` |
 | `queue_high_water` | int32 | Peak writer-queue depth; non-zero means disk pressure |
 | `packet_format` | int32 | 2023 |
@@ -157,6 +157,20 @@ incomplete under FR-023.
 
 Found during implementation against real bytes; `PacketHeader.has_frame_counter` is the
 guard, and `test_end_of_session_packets_carry_no_frame_counter` pins the behaviour.
+
+### Measuring loss (revised in feature 002)
+
+The original rule -- count gaps in `frameIdentifier` -- was wrong, and real use exposed it.
+That counter numbers the game's own frames, and at the 60 Hz send rate the game does not
+send every one: across the owner's library it sent 81-93% of frame numbers. Sessions with
+**zero** real loss therefore reported 5-18%, and 15 of 35 were wrongly marked incomplete.
+
+The rule now (`capture/loss.py`, shared by the recorder and ingest): every sent frame
+arrives as three datagrams (LapData, Motion, CarTelemetry), so loss is the datagrams
+missing from frames that arrived, plus bursts -- frame gaps over 5, far larger than
+send-rate skips -- scaled by the session's send ratio measured outside the bursts.
+Measured: the six worst-reporting sessions had one incomplete frame in ~1.27 million
+(0.000%), while the reference capture's genuine 79-frame burst still reads 0.193%.
 
 ### Sector time recombination
 

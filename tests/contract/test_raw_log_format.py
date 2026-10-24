@@ -100,6 +100,10 @@ def test_the_committed_fixture_is_a_valid_raw_log(fixture_path: Path) -> None:
 
 
 def test_fixture_stays_within_its_size_budget(fixture_path: Path) -> None:
-    """It has to remain committable; principle VIII is about data, not test assets."""
+    """It has to remain committable; principle VIII is about data, not test assets.
+
+    10 MB since feature 002 (research R10): a lap trace cannot be tested from twenty
+    sampled packets, and two full-rate laps would be 61 MB.
+    """
     size = fixture_path.stat().st_size
-    assert size < 5 * 1024 * 1024, f"fixture grew to {size / 1e6:.1f} MB"
+    assert size < 10 * 1024 * 1024, f"fixture grew to {size / 1e6:.1f} MB"

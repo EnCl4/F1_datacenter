@@ -107,7 +107,15 @@ function LapTable({ laps, bestLap }: { laps: LapRow[]; bestLap: number | null })
   );
 }
 
-export function SessionDetail({ uid, onBack }: { uid: string; onBack: () => void }) {
+export function SessionDetail({
+  uid,
+  onBack,
+  onCompare,
+}: {
+  uid: string;
+  onBack: () => void;
+  onCompare: () => void;
+}) {
   const [session, setSession] = useState<Detail | null>(null);
   const [laps, setLaps] = useState<LapRow[]>([]);
   const [stints, setStints] = useState<StintRow[]>([]);
@@ -138,6 +146,9 @@ export function SessionDetail({ uid, onBack }: { uid: string; onBack: () => void
         <span className="tag race">{session.session_type_name}</span>
         {session.started_late ? <span className="tag warn">started late</span> : null}
         {session.incomplete ? <span className="tag warn">incomplete recording</span> : null}
+        <button className="primary-btn" onClick={onCompare}>
+          Compare laps
+        </button>
       </div>
       <div className="detail-sub">
         {formatDate(session.started_at)} · {formatDuration(session.duration_s)} ·{" "}

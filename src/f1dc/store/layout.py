@@ -15,6 +15,7 @@ from f1dc.config import Paths
 SESSION_FILE = "session.parquet"
 LAPS_FILE = "laps.parquet"
 STINTS_FILE = "stints.parquet"
+TRACES_FILE = "traces.parquet"
 RECORDINGS_FILE = "recordings.parquet"
 STARRED_FILE = "starred.json"
 
@@ -38,6 +39,10 @@ def laps_parquet(paths: Paths, session_uid: str) -> Path:
 
 def stints_parquet(paths: Paths, session_uid: str) -> Path:
     return session_dir(paths, session_uid) / STINTS_FILE
+
+
+def traces_parquet(paths: Paths, session_uid: str) -> Path:
+    return session_dir(paths, session_uid) / TRACES_FILE
 
 
 def recordings_parquet(paths: Paths) -> Path:

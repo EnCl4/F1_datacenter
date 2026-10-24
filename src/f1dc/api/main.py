@@ -17,6 +17,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from f1dc.analysis.compare import CompareError
+from f1dc.api.routes import analysis as analysis_routes
 from f1dc.api.routes import sessions as sessions_routes
 from f1dc.config import Paths
 
@@ -64,7 +66,16 @@ def create_app(paths: Paths) -> FastAPI:
             content={"error": {"code": exc.code, "message": exc.message}},
         )
 
+    @app.exception_handler(CompareError)
+    async def _compare_error(_request: Request, exc: CompareError) -> JSONResponse:
+        # Same error shape as every other route; 409 messages are shown verbatim in the UI.
+        return JSONResponse(
+            status_code=exc.status,
+            content={"error": {"code": exc.code, "message": exc.message}},
+        )
+
     app.include_router(sessions_routes.router, prefix="/api")
+    app.include_router(analysis_routes.router, prefix="/api")
 
     if FRONTEND_DIR.is_dir():
         app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")

@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from f1dc.capture.rawlog import iter_records
@@ -23,7 +24,8 @@ from f1dc.config import Paths
 from f1dc.ingest import INGEST_VERSION
 from f1dc.ingest.compress import compress_log, is_compressed, open_raw
 from f1dc.ingest.laps import build
-from f1dc.ingest.sessionizer import Sessionizer
+from f1dc.ingest.sessionizer import RawSession, Sessionizer
+from f1dc.ingest.traces import to_rows
 from f1dc.models import Recording
 from f1dc.store import catalog, layout
 from f1dc.store.schema import (
@@ -31,6 +33,7 @@ from f1dc.store.schema import (
     RECORDING_SCHEMA,
     SESSION_SCHEMA,
     STINT_SCHEMA,
+    TRACE_SCHEMA,
     table_from_rows,
 )
 
@@ -101,6 +104,7 @@ def ingest_log(paths: Paths, log_path: Path, *, report: IngestReport) -> list[st
             continue
 
         result = build(raw, recording_id)
+        result.traces = build_traces(raw, result)
         recording = Recording(
             recording_id=recording_id,
             path=str(log_path),
@@ -124,6 +128,28 @@ def ingest_log(paths: Paths, log_path: Path, *, report: IngestReport) -> list[st
         report.sessions_written += 1
 
     return written
+
+
+def build_traces(raw: RawSession, result) -> dict[str, list] | None:
+    """Per-metre traces for every lap with channel data (feature 002).
+
+    The finish anchor uses the lap time feature 001 already established, from
+    SessionHistory, so the running time gap at the line matches the official lap times.
+    """
+    lap_times = {lap.lap_number: lap.lap_time_ms for lap in result.laps}
+    track_length = result.session.track_length_m
+    merged: dict[str, list] | None = None
+    for number in raw.traces.lap_numbers():
+        trace = raw.traces.build(number, track_length, lap_times.get(number))
+        if trace is None:
+            continue
+        columns = to_rows(result.session.session_uid, number, trace)
+        if merged is None:
+            merged = columns
+        else:
+            for name, values in columns.items():
+                merged[name].extend(values)
+    return merged
 
 
 def _write_session(paths: Paths, result) -> None:
@@ -151,6 +177,12 @@ def _write_session(paths: Paths, result) -> None:
         temp / layout.STINTS_FILE,
         compression="zstd",
     )
+    if result.traces is not None:
+        pq.write_table(
+            pa.Table.from_pydict(result.traces, schema=TRACE_SCHEMA),
+            temp / layout.TRACES_FILE,
+            compression="zstd",
+        )
     if result.recording is not None:
         pq.write_table(
             table_from_rows([result.recording.to_row()], RECORDING_SCHEMA),

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type RecorderState } from "./api";
 import { SessionLibrary } from "./SessionLibrary";
 import { SessionDetail } from "./SessionDetail";
+import { Compare } from "./Compare";
 
 /**
  * FR-029: the library must say plainly when nothing is being recorded.
@@ -41,6 +42,8 @@ function RecordingBanner({ status }: { status: RecorderState | null }) {
 
 export function App() {
   const [selected, setSelected] = useState<string | null>(null);
+  // library -> detail -> compare; "comparing" is only meaningful while a session is selected.
+  const [comparing, setComparing] = useState(false);
   const [status, setStatus] = useState<RecorderState | null>(null);
   const [total, setTotal] = useState<number | null>(null);
 
@@ -73,8 +76,14 @@ export function App() {
 
       <RecordingBanner status={status} />
 
-      {selected ? (
-        <SessionDetail uid={selected} onBack={() => setSelected(null)} />
+      {selected && comparing ? (
+        <Compare sessionUid={selected} onBack={() => setComparing(false)} />
+      ) : selected ? (
+        <SessionDetail
+          uid={selected}
+          onBack={() => setSelected(null)}
+          onCompare={() => setComparing(true)}
+        />
       ) : (
         <SessionLibrary onOpen={setSelected} onTotal={setTotal} />
       )}

@@ -75,6 +75,28 @@ f1dc serve --open
 > trade-off is real: a session driven before you start the recorder cannot be recovered.
 > The window makes its state obvious, and warns you if you started mid-session.
 
+## Analysing laps
+
+Open a session and click **Compare laps**. You get:
+
+- **Session pace**: every lap time in order, tyre stints shaded, and laps that don't count
+  shown hollow with the reason. Click a lap to compare it.
+- **Time gap**: how far ahead or behind the reference lap you are, metre by metre. Where
+  the line climbs, you're losing time. The reference defaults to the session's best
+  counting lap.
+- **Circuit map**: drawn from your own car's positions, coloured by speed, throttle or
+  brake. Wherever you point on a chart, the map marks the same spot.
+- **Traces**: speed, throttle, brake, steering, gear, revs and g-forces for both laps,
+  aligned by distance. Point anywhere and every chart follows; drag to zoom them all.
+
+Any two laps at the **same circuit** can be compared, across sessions. Their conditions
+are shown side by side, with anything that changes lap time highlighted (assists, tyres,
+fuel, weather). Laps from different circuits can't be compared, because metre 2,300 at
+Monza isn't metre 2,300 at Interlagos.
+
+Gaps in a recording show as gaps; nothing is drawn across missing data. Sessions recorded
+before charts existed gain them by re-running `f1dc ingest`, with no re-driving.
+
 ## Where your data lives
 
 ```
@@ -120,7 +142,6 @@ lap content rather than loss figures.
 
 ## Status
 
-Feature 001 (capture, ingest, session library) is implemented. Progression charts, race
-and strategy analysis, and the setup notebook are planned features. Per-frame telemetry
-channels are not stored yet; they will be added by re-ingesting the raw logs you already
-have, which is why automatic pruning ships disabled.
+Implemented: feature 001 (capture, ingest, session library) and feature 002 (lap
+telemetry analysis). Planned: progression across sessions, race and strategy analysis, and
+a setup notebook.
