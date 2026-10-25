@@ -9,7 +9,8 @@
 **Input**: The owner (in Portuguese): show tyre and brake temperatures, battery and fuel,
 track-limit excursions, the fight with other cars and tyre wear. *"se tiver mais dados eu
 também quero"*: any other useful data too. And one chart showing longitudinal and lateral
-acceleration together.
+acceleration together. Added later: *"a way to delete a session (must ask for a
+confirmation)"*, clarified as **permanent** deletion.
 
 **Context**: Every item below is already in the owner's recordings and was measured on
 the reference Interlagos race before this spec was written. Nothing requires re-driving.
@@ -176,6 +177,38 @@ and the brake-bias change on laps 3–4 are shown on the laps where they occurre
 
 ---
 
+### User Story 7 - Delete a Session (Priority: P7)
+
+The driver can permanently delete a session they no longer want: a test, a restart, a
+race they abandoned. Because the deletion cannot be undone, they must confirm it by
+typing the circuit name.
+
+**Why this priority**: The owner asked for it. The library already holds 39 sessions,
+several of them abandoned or restarted, and it will only grow. It comes last because it is
+independent of every other story, and because it is the first action in the product that
+destroys data the system cannot regenerate.
+
+**Independent Test**: In a test library, delete a session by typing its circuit name;
+confirm it disappears, its recording is gone, and running ingest again does not bring it
+back. Confirm that a wrong name or a cancel deletes nothing.
+
+**Acceptance Scenarios**:
+
+1. **Given** a session, **When** the driver chooses to delete it, **Then** they are told
+   the deletion is permanent, which session will be deleted (circuit, type, date, laps),
+   and asked to type the circuit name.
+2. **Given** the confirmation prompt, **When** the typed name does not match or the driver
+   cancels, **Then** nothing is deleted.
+3. **Given** a correctly confirmed deletion, **When** it completes, **Then** the session,
+   its laps and charts, and its original recording are all gone, and it no longer appears
+   in the library, the field views or the lap pickers.
+4. **Given** a deleted session, **When** ingest runs again, **Then** the session does not
+   come back.
+5. **Given** the session currently being recorded, **When** the driver tries to delete it,
+   **Then** the deletion is refused with the reason.
+
+---
+
 ### Edge Cases
 
 - **Sessions recorded before this feature.** Every new value must come from existing
@@ -197,6 +230,15 @@ and the brake-bias change on laps 3–4 are shown on the laps where they occurre
   read before the reset, or the final lap reads as zero (as found on the reference race's
   last lap).
 - **Missing samples.** As in feature 002, gaps stay gaps.
+- **Deleting while ingest is running.** The two must not interleave. A deletion during
+  ingest waits or is refused; it never leaves a half-deleted or half-written session.
+- **A recording holding more than one session.** Recordings made by the app hold one
+  session each, but a converted or hand-copied file might not. Deleting one session must
+  never silently destroy another. Such a deletion is refused, with the reason.
+- **A starred session.** Starring protects against pruning, not against a deliberate
+  delete; but the confirmation must say that the session is starred.
+- **Deletion fails half-way** (a file in use, a permission error). The system must report
+  exactly what was and was not removed, and never report success it did not achieve.
 
 ## Requirements *(mandatory)*
 
@@ -259,6 +301,20 @@ and the brake-bias change on laps 3–4 are shown on the laps where they occurre
 - **FR-024**: System MUST list race events (overtakes, penalties, fastest laps) with
   their lap.
 
+#### Deleting a session
+
+- **FR-027**: Users MUST be able to delete a session permanently, from the session list
+  and from the session page.
+- **FR-028**: Deletion MUST require the driver to type the circuit name, and the system
+  MUST verify that confirmation itself rather than trusting the page.
+- **FR-029**: Deletion MUST remove the session's derived data, its original recording and
+  its starred status, so that re-running ingest cannot restore it.
+- **FR-030**: System MUST refuse to delete the session currently being recorded, or a
+  recording that also holds other sessions.
+- **FR-031**: Deletion and ingest MUST NOT run at the same time.
+- **FR-032**: System MUST report exactly what was removed, and MUST NOT report success
+  for a deletion that only partly completed.
+
 #### General
 
 - **FR-025**: Every new value MUST be derivable from existing recordings by
@@ -294,6 +350,10 @@ and the brake-bias change on laps 3–4 are shown on the laps where they occurre
   opening a session.
 - **SC-005**: Pages with the new data open in under 2 seconds.
 - **SC-006**: The new stored data adds no more than 25 MB per hour of driving.
+- **SC-007**: No session can be deleted without its circuit name being typed. 100% of
+  attempts with a wrong name, a cancel, or a direct request lacking the confirmation
+  delete nothing.
+- **SC-008**: A deleted session never reappears, including after re-running ingest.
 
 ## Assumptions
 
@@ -306,5 +366,9 @@ and the brake-bias change on laps 3–4 are shown on the laps where they occurre
   verified against real bytes before use (constitution principle IV).
 - **The player's car only** for temperatures, energy, settings, damage and excursions.
 - **No new recording is needed**: the recorder already captures every packet involved.
+- **Deletion is permanent, by the owner's explicit choice.** A recoverable trash was
+  offered and declined. The typed-name confirmation is the safeguard instead.
+- **Deleting needs a constitutional amendment.** The constitution currently makes the web
+  app read-only; this feature amends that narrowly (see plan.md).
 - **The AI race engineer is out of scope.** FR-026 only ensures the data it would need is
   stored in a queryable form.

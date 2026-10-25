@@ -1,5 +1,23 @@
 <!--
 SYNC IMPACT REPORT
+Version change: 1.0.0 -> 1.1.0 (MINOR: materially expanded guidance; no principle removed)
+Date: 2026-10-24
+Trigger: feature 003, User Story 7: the owner asked to delete sessions permanently.
+Modified principles:
+  - I. Raw Capture Is Immutable and Authoritative (NON-NEGOTIABLE): clarified, not
+    weakened. "Append-only" is defined as "never modified once written"; removing a whole
+    recording is allowed only through an explicit owner action (pruning, or deleting a
+    session). Owner approval, required for NON-NEGOTIABLE principles: given 2026-10-24,
+    after being told that deletion removes the raw recording and is irreversible, the
+    owner chose permanent deletion over a recoverable trash.
+Modified sections:
+  - Technology Constraints: the UI is read-only EXCEPT for one confirmed, server-verified,
+    ingest-serialised action: deleting a session.
+Added / removed sections: none
+Deferred TODOs: none
+Templates requiring review: none (templates read the constitution at runtime)
+
+Previous report (1.0.0, 2026-09-04): initial ratification.
 Version change: none -> 1.0.0 (initial ratification)
 Modified principles: none (new document)
 Added sections:
@@ -23,7 +41,9 @@ Templates requiring review: .specify/templates/plan-template.md,
 
 Every UDP datagram received MUST be appended to a raw log before any parsing, filtering,
 or interpretation occurs. The raw log is the single source of truth and MUST be treated as
-append-only. Every derived artifact — parsed tables, resampled laps, aggregates, charts —
+append-only: once written, its bytes are never modified. A whole recording MAY be removed,
+but only by an explicit owner action (pruning by age, or deleting a session), and never as
+a side effect of any other operation. Every derived artifact — parsed tables, resampled laps, aggregates, charts —
 MUST be fully reproducible from raw logs alone. No feature may depend on data that was not
 first captured raw.
 
@@ -109,7 +129,12 @@ file handles on actively-written captures and will upload every byte.
   only, with no third-party dependency in the socket loop.
 - Storage is an append-only raw log plus a columnar derived store (Parquet with DuckDB for
   query). The derived store has exactly one writer.
-- The user interface is a local web application and is READ-ONLY against the derived store.
+- The user interface is a local web application and is READ-ONLY against the derived store,
+  with exactly one exception: permanently deleting a session. That action MUST be
+  confirmed by the owner typing the circuit name, MUST be verified by the server rather
+  than trusted from the page, MUST NOT run concurrently with ingest, and MUST remove the
+  derived data and the raw recording together, so that the session cannot be resurrected
+  by re-ingest. No other write may be added to the UI without amending this constraint.
 - Recording scope is the player car at full rate. Whole-field information is sourced only
   from SessionHistory, FinalClassification, Participants, Session, and TyreSets packets.
   Full-rate telemetry for non-player cars is explicitly out of scope, and remains
@@ -142,4 +167,4 @@ Compliance is verified during `/speckit-analyze` before `/speckit-implement`. An
 task that violates a principle MUST either be revised or accompanied by a documented,
 approved exception recorded in the relevant plan file.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-04 | **Last Amended**: 2026-09-04
+**Version**: 1.1.0 | **Ratified**: 2026-09-04 | **Last Amended**: 2026-10-24

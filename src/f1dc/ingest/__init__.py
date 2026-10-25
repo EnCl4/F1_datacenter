@@ -10,4 +10,4 @@ from __future__ import annotations
 #: Bumped whenever ingest would produce different output from the same raw log.
 #: `f1dc ingest --all` re-processes anything whose stored version is older, which is how
 #: a parser improvement reaches sessions recorded months ago (FR-016).
-INGEST_VERSION = "1.1.1"
+INGEST_VERSION = "1.2.0"
