@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import type { LapTrace } from "../api";
+import type { ExcursionRow, LapTrace } from "../api";
 import { chartColors } from "./theme";
+import { nearestIndex } from "./trace";
 
 type MapChannel = "speed_kph" | "throttle" | "brake";
 
@@ -19,25 +20,14 @@ function ramp(t: number): string {
   return `hsl(${Math.round(230 * (1 - clamped))}, 80%, 55%)`;
 }
 
-/** Index of the sample whose distance is closest to `d` (distance_m is ascending). */
-function nearestIndex(distances: number[], d: number): number {
-  let lo = 0;
-  let hi = distances.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (distances[mid] < d) lo = mid + 1;
-    else hi = mid;
-  }
-  if (lo > 0 && Math.abs(distances[lo - 1] - d) <= Math.abs(distances[lo] - d)) return lo - 1;
-  return lo;
-}
-
 interface Props {
   trace: LapTrace;
   /** Drawn first as a dim full outline, so gaps in `trace` read as "no data" rather than a broken circuit. */
   reference?: LapTrace;
   /** Distance under the pointer on the charts; null when the pointer is elsewhere. */
   cursorDistance: number | null;
+  /** Off-track excursions of the compared lap (already filtered to that lap); drawn as red segments. */
+  excursions?: ExcursionRow[];
 }
 
 /**
@@ -48,7 +38,7 @@ interface Props {
  * The coloured line is expensive (thousands of segments), so it is painted once into
  * an offscreen canvas and the cursor marker is composited on top per cursor move.
  */
-function TrackMapImpl({ trace, reference, cursorDistance }: Props) {
+function TrackMapImpl({ trace, reference, cursorDistance, excursions }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const base = useRef<HTMLCanvasElement | null>(null);
@@ -210,8 +200,45 @@ function TrackMapImpl({ trace, reference, cursorDistance }: Props) {
       ctx.stroke();
     }
 
+    // 3) Excursions on top: a red segment (white halo so it stands out against the red
+    //    end of the colour ramp) from start_m over length_m, plus a ring at its start.
+    if (excursions && excursions.length > 0) {
+      const dist = trace.channels.distance_m;
+      const segment = (halo: boolean) => {
+        ctx.lineWidth = halo ? 10 : 6;
+        ctx.strokeStyle = halo ? "#ffffff" : chartColors().red;
+        for (const ex of excursions) {
+          const from = nearestIndex(dist, ex.start_m);
+          const to = nearestIndex(dist, ex.start_m + Math.max(ex.length_m, 1));
+          ctx.beginPath();
+          let drawing = false;
+          for (let i = from; i <= to; i++) {
+            const p = toScreen(trace, i);
+            if (!p) { drawing = false; continue; }
+            if (drawing) ctx.lineTo(p[0], p[1]);
+            else ctx.moveTo(p[0], p[1]);
+            drawing = true;
+          }
+          ctx.stroke();
+        }
+      };
+      segment(true);
+      segment(false);
+      for (const ex of excursions) {
+        const p = toScreen(trace, nearestIndex(dist, ex.start_m));
+        if (!p) continue;
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], 5, 0, Math.PI * 2);
+        ctx.fillStyle = chartColors().red;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#ffffff";
+        ctx.stroke();
+      }
+    }
+
     paint(null);
-  }, [trace, reference, channel, width, paint]);
+  }, [trace, reference, channel, width, paint, excursions]);
 
   // Marker follows the charts' cursor without rebuilding the base layer.
   useEffect(() => {
@@ -240,6 +267,14 @@ function TrackMapImpl({ trace, reference, cursorDistance }: Props) {
       <div ref={host} className="map-canvas-host">
         <canvas ref={canvas} style={{ width: "100%", height: MAP_HEIGHT }} />
       </div>
+      {excursions && excursions.length > 0 ? (
+        <div className="map-legend">
+          <span className="excursion-key" />
+          <span>
+            Red = off track ({excursions.length} excursion{excursions.length === 1 ? "" : "s"} this lap)
+          </span>
+        </div>
+      ) : null}
       {range ? (
         <div className="map-legend">
           <span>

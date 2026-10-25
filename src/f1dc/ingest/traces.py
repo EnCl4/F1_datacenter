@@ -33,6 +33,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from f1dc.store.schema import TRACE_SCHEMA
+
 REWIND_THRESHOLD_M = 50.0
 GAP_THRESHOLD_M = 25.0
 #: A lap clock below this, after one well above it, means the line was crossed (not a
@@ -45,8 +47,23 @@ CONTINUOUS = ("time_ms", "speed_kph", "throttle", "brake", "steer", "rpm", "g_la
 #: Discrete channels: the last value at or before each grid point. Interpolating a gear
 #: change would invent "gear 4.5".
 DISCRETE = ("gear", "drs")
-CHANNELS = ("time_ms", "speed_kph", "throttle", "brake", "steer", "gear", "rpm", "drs",
-            "g_lat", "g_lon", "x", "z")
+BASE_CHANNELS = ("time_ms", "speed_kph", "throttle", "brake", "steer", "gear", "rpm", "drs",
+                 "g_lat", "g_lon", "x", "z")
+
+#: Feature 003 channels, carried as optional extras after the 13 base row fields so that
+#: callers and tests written for feature 002 keep working unchanged.
+_WHEELS = ("fl", "fr", "rl", "rr")
+EXTRA_CONTINUOUS = (
+    "gap_ahead_ms",
+    *(f"tyre_surface_{w}" for w in _WHEELS),
+    *(f"tyre_inner_{w}" for w in _WHEELS),
+    *(f"brake_{w}" for w in _WHEELS),
+    *(f"pressure_{w}" for w in _WHEELS),
+)
+EXTRA_DISCRETE = ("off_track",)
+EXTRA = EXTRA_CONTINUOUS + EXTRA_DISCRETE
+CHANNELS = BASE_CHANNELS + EXTRA
+_BASE_WIDTH = 13
 
 
 @dataclass
@@ -59,6 +76,7 @@ class _Frame:
     g_lon: float = math.nan
     x: float = math.nan
     z: float = math.nan
+    gap_ahead_ms: float = math.nan
 
 
 @dataclass
@@ -81,13 +99,14 @@ class TraceBuilder:
     # ------------------------------------------------------------------ feeding
 
     def on_lap_data(
-        self, frame: int, lap: int, distance: float, time_ms: float, sector: int
+        self, frame: int, lap: int, distance: float, time_ms: float, sector: int,
+        gap_ahead_ms: float = math.nan,
     ) -> None:
         """LapData opens a frame. Motion and CarTelemetry for the same frame follow it."""
         if lap <= 0:
             return
         # Only the newest frame can still be completed; older ones are abandoned.
-        self._frames = {frame: _Frame(lap, distance, time_ms, sector)}
+        self._frames = {frame: _Frame(lap, distance, time_ms, sector, gap_ahead_ms=gap_ahead_ms)}
 
         if distance >= 0:
             previous = self._last_sector.get(lap)
@@ -112,8 +131,13 @@ class TraceBuilder:
         gear: float,
         rpm: float,
         drs: float,
+        extra: tuple[float, ...] | None = None,
     ) -> None:
-        """CarTelemetry closes the frame and emits one sample."""
+        """CarTelemetry closes the frame and emits one sample.
+
+        ``extra``: the feature-003 per-wheel values in ``EXTRA`` order, minus the gap to the
+        car ahead, which comes from LapData via ``on_lap_data``.
+        """
         pending = self._frames.pop(frame, None)
         if pending is None or pending.distance < 0:
             return  # no LapData for this frame, or before the line (R3)
@@ -137,10 +161,13 @@ class TraceBuilder:
             # increasing distance; this sample adds nothing.
             return
 
-        lap.rows.append((
+        row = (
             distance, pending.time_ms, speed_kph, throttle, brake, steer, rpm,
             pending.g_lat, pending.g_lon, pending.x, pending.z, gear, drs,
-        ))
+        )
+        if extra is not None:
+            row = (*row, pending.gap_ahead_ms, *extra)
+        lap.rows.append(row)
         lap.furthest = max(lap.furthest, distance)
 
     # ------------------------------------------------------------------ output
@@ -179,7 +206,10 @@ def resample(
 ) -> dict[str, np.ndarray]:
     """Resample samples ``(distance, time, speed, throttle, brake, steer, rpm, g_lat, g_lon,
     x, z, gear, drs)`` onto whole metres. Deterministic, so ingest stays idempotent."""
-    data = np.asarray(rows, dtype=np.float64)
+    width = max(len(r) for r in rows)
+    data = np.full((len(rows), width), np.nan)
+    for i, r in enumerate(rows):
+        data[i, : len(r)] = r
     d = data[:, 0]
     source = {
         "time_ms": data[:, 1], "speed_kph": data[:, 2], "throttle": data[:, 3],
@@ -187,6 +217,9 @@ def resample(
         "g_lat": data[:, 7], "g_lon": data[:, 8], "x": data[:, 9], "z": data[:, 10],
         "gear": data[:, 11], "drs": data[:, 12],
     }
+    for offset, name in enumerate(EXTRA):
+        column = _BASE_WIDTH + offset
+        source[name] = data[:, column] if data.shape[1] > column else np.full(len(d), np.nan)
 
     # Anchor at the line only when the data actually reaches it. A lap whose samples stop
     # far short -- recording ended, or a sparse fixture -- simply ends where its data does,
@@ -203,7 +236,7 @@ def resample(
     grid = np.arange(0, end + 1, dtype=np.float64)
 
     out: dict[str, np.ndarray] = {}
-    for name in CONTINUOUS:
+    for name in CONTINUOUS + EXTRA_CONTINUOUS:
         values = source[name]
         known = ~np.isnan(values)
         if known.sum() < 2:
@@ -221,7 +254,7 @@ def resample(
         out[name] = np.interp(grid, xs, ys)
 
     index = np.clip(np.searchsorted(d, grid, side="right") - 1, 0, len(d) - 1)
-    for name in DISCRETE:
+    for name in DISCRETE + EXTRA_DISCRETE:
         out[name] = source[name][index]
 
     # Gaps: null every channel strictly between two samples too far apart (FR-004), and
@@ -259,4 +292,5 @@ def to_rows(session_uid: str, lap_number: int, trace: dict[str, np.ndarray]) -> 
     for name in CHANNELS:
         values = trace[name].astype(np.float32)
         columns[name] = [None if math.isnan(v) else float(v) for v in values.tolist()]
-    return columns
+    # Every TRACE_SCHEMA column is present; channels this writer does not produce yet are null.
+    return {name: columns.get(name, [None] * n) for name in TRACE_SCHEMA.names}

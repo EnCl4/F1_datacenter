@@ -173,12 +173,13 @@ def test_laps_for_an_unknown_session_are_a_404(client) -> None:
 
 
 def test_the_api_exposes_no_write_routes(client) -> None:
-    """A design property, not an omission: ingest owns the write path."""
+    """Constitution 1.1.0: the UI is read-only except ONE confirmed action, deleting a
+    session. Any other write route added here must fail this test."""
     schema = client.get("/api/openapi.json").json()
-    verbs = {
-        method
-        for path in schema["paths"].values()
-        for method in path
+    writes = sorted(
+        (method, path)
+        for path, ops in schema["paths"].items()
+        for method in ops
         if method in {"post", "put", "patch", "delete"}
-    }
-    assert verbs == set(), f"unexpected write routes: {verbs}"
+    )
+    assert writes == [("delete", "/api/sessions/{session_uid}")], writes

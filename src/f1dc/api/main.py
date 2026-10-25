@@ -19,8 +19,10 @@ from fastapi.staticfiles import StaticFiles
 
 from f1dc.analysis.compare import CompareError
 from f1dc.api.routes import analysis as analysis_routes
+from f1dc.api.routes import car as car_routes
 from f1dc.api.routes import sessions as sessions_routes
 from f1dc.config import Paths
+from f1dc.store.delete import DeleteError
 
 FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend" / "dist"
 
@@ -76,6 +78,14 @@ def create_app(paths: Paths) -> FastAPI:
 
     app.include_router(sessions_routes.router, prefix="/api")
     app.include_router(analysis_routes.router, prefix="/api")
+    app.include_router(car_routes.router, prefix="/api")
+
+    @app.exception_handler(DeleteError)
+    async def _delete_error(_request: Request, exc: DeleteError) -> JSONResponse:
+        body: dict = {"error": {"code": exc.code, "message": exc.message}}
+        if exc.report is not None:  # partial_delete: say exactly what went and what did not
+            body.update(exc.report.to_dict())
+        return JSONResponse(status_code=exc.status, content=body)
 
     if FRONTEND_DIR.is_dir():
         app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")

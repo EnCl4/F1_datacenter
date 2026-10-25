@@ -89,3 +89,37 @@ def test_the_known_corner_difference_is_visible(full: Paths) -> None:
     five = catalog.get_trace(full, REFERENCE_UID, 5)
     assert five["speed_kph"][2300] > two["speed_kph"][2300]
     assert five["gear"][2300] < two["gear"][2300]
+
+
+# ---------------------------------------------------------------- feature 003 (SC-002)
+
+
+def test_front_tyre_cores_reach_105_to_107_by_lap_3(full: Paths) -> None:
+    from f1dc.analysis import car
+
+    lap3 = next(r for r in car.lap_car(full, REFERENCE_UID) if r["lap_number"] == 3)
+    assert 104.5 <= lap3["tyre_inner_avg_fl"] <= 107.5
+    assert 104.5 <= lap3["tyre_inner_avg_fr"] <= 107.5
+
+
+def test_the_front_right_runs_hotter_than_the_front_left(full: Paths) -> None:
+    from f1dc.analysis import car
+
+    for row in car.lap_car(full, REFERENCE_UID):
+        if row["tyre_surface_avg_fl"] is not None:
+            assert row["tyre_surface_avg_fr"] >= row["tyre_surface_avg_fl"]
+
+
+def test_excursions_on_racing_laps_3_to_5(full: Paths) -> None:
+    from f1dc.analysis import car
+
+    laps = {r["lap_number"]: r for r in car.lap_car(full, REFERENCE_UID)}
+    assert laps[2]["excursions"] == 0
+    assert all(laps[n]["excursions"] > 0 for n in (3, 4, 5))
+
+
+def test_temperature_traces_cover_the_lap(full: Paths) -> None:
+    trace = catalog.get_trace(full, REFERENCE_UID, 2)
+    temps = [v for v in trace["tyre_inner_fl"] if v is not None]
+    assert len(temps) > 4000
+    assert 90 < max(temps) < 130

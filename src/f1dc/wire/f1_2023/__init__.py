@@ -20,6 +20,7 @@ from f1dc.wire.f1_2023.event import EventCodec
 from f1dc.wire.f1_2023.final_classification import FinalClassificationCodec
 from f1dc.wire.f1_2023.lap_data import LapDataCodec
 from f1dc.wire.f1_2023.motion import MotionCodec
+from f1dc.wire.f1_2023.participants import ParticipantsCodec
 from f1dc.wire.f1_2023.session import SessionCodec
 from f1dc.wire.f1_2023.session_history import SessionHistoryCodec
 from f1dc.wire.f1_2023.tyre_sets import TyreSetsCodec
@@ -30,6 +31,7 @@ PACKET_FORMAT = 2023
 CODECS = (
     SessionCodec,
     LapDataCodec,
+    ParticipantsCodec,
     EventCodec,
     CarSetupsCodec,
     CarStatusCodec,
@@ -45,7 +47,6 @@ CODECS = (
 #: Their bytes are preserved in the raw log, so a later feature can decode them from
 #: recordings made today.
 UNDECODED_PACKET_IDS = {
-    4: "Participants (1306 bytes) -- rival names, deferred",
     9: "LobbyInfo -- multiplayer lobbies, out of scope",
     13: "MotionEx (217 bytes) -- racing line map, deferred",
 }
@@ -81,6 +82,8 @@ __all__ = [
     "FinalClassificationCodec",
     "LapDataCodec",
     "MotionCodec",
+    "ParticipantData",
+    "ParticipantsCodec",
     "SessionCodec",
     "SessionHistoryCodec",
     "TyreSetsCodec",

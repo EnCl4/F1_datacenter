@@ -5,6 +5,7 @@ import {
   formatDate,
   formatLapTime,
   type CompareResult,
+  type ExcursionRow,
   type LapContext,
   type LapTrace,
   type PaceData,
@@ -15,6 +16,7 @@ import { PaceChart } from "./charts/PaceChart";
 import { GapChart } from "./charts/GapChart";
 import { TrackMap } from "./charts/TrackMap";
 import { TraceCharts } from "./charts/TraceCharts";
+import { GGDiagram } from "./charts/GGDiagram";
 
 const lapRef = (uid: string, lap: number) => `${uid}:${lap}`;
 
@@ -88,9 +90,96 @@ function ContextCompare({ result }: { result: CompareResult }) {
   );
 }
 
+// Excursions are per session and static while the page is open, so fetch each once.
+const excursionCache = new Map<string, Promise<ExcursionRow[]>>();
+
+function loadExcursions(uid: string): Promise<ExcursionRow[]> {
+  let p = excursionCache.get(uid);
+  if (!p) {
+    p = api.excursions(uid).then((r) => r.items);
+    // A failure must not be cached: the driver may run ingest and come back.
+    p.catch(() => excursionCache.delete(uid));
+    excursionCache.set(uid, p);
+  }
+  return p;
+}
+
+/** The compared lap's off-track excursions, or the server's message when it has none to give. */
+function useExcursions(uid: string, lapNumber: number) {
+  const [items, setItems] = useState<ExcursionRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setItems(null);
+    setError(null);
+    loadExcursions(uid)
+      .then((all) => !cancelled && setItems(all.filter((e) => e.lap_number === lapNumber)))
+      .catch((e: Error) => !cancelled && setError(e.message));
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, lapNumber]);
+  return { items, error };
+}
+
+function ExcursionList({
+  lap,
+  items,
+  error,
+}: {
+  lap: LapTrace;
+  items: ExcursionRow[] | null;
+  error: string | null;
+}) {
+  const wheelNames = (wheels: string) =>
+    wheels
+      .split(",")
+      .map((w) => w.trim())
+      .filter((w) => w !== "")
+      .map((w) => w.toUpperCase())
+      .join(" + ");
+
+  return (
+    <div className="excursion-list">
+      <div className="chart-title">Track limits, lap {lap.lap_number}</div>
+      {error ? (
+        <div className="chart-caption">{error}</div>
+      ) : items === null ? (
+        <div className="chart-caption">Loading…</div>
+      ) : items.length === 0 ? (
+        <div className="chart-caption">No wheel left the track on this lap.</div>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th className="left">At</th>
+              <th>Length</th>
+              <th className="left">Wheels</th>
+              <th className="left">Surface</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((e) => (
+              <tr key={`${e.start_m}-${e.session_time_s}`}>
+                <td className="left">{Math.round(e.start_m)} m</td>
+                <td>{Math.round(e.length_m)} m</td>
+                <td className="left" title="FL front-left, FR front-right, RL rear-left, RR rear-right">
+                  {wheelNames(e.wheels)}
+                </td>
+                <td className="left">{e.surface}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 /** Holds the cursor distance locally so moving the pointer re-renders only the map. */
 function Analysis({ result }: { result: CompareResult }) {
   const [cursor, setCursor] = useState<number | null>(null);
+  const excursions = useExcursions(result.lap.session_uid, result.lap.lap_number);
   const warnings = [
     result.lap.counts ? null : `Compared lap ${result.lap.lap_number} does not count (${reasonText(result.lap.exclusion_reason)}).`,
     result.reference.counts
@@ -110,7 +199,17 @@ function Analysis({ result }: { result: CompareResult }) {
 
       <div className="compare-top">
         <GapChart gap={result.gap} lap={result.lap} reference={result.reference} />
-        <TrackMap trace={result.lap} reference={result.reference} cursorDistance={cursor} />
+        <TrackMap
+          trace={result.lap}
+          reference={result.reference}
+          cursorDistance={cursor}
+          excursions={excursions.items ?? undefined}
+        />
+      </div>
+
+      <div className="compare-top">
+        <GGDiagram lap={result.lap} reference={result.reference} cursorDistance={cursor} />
+        <ExcursionList lap={result.lap} items={excursions.items} error={excursions.error} />
       </div>
 
       <TraceCharts lap={result.lap} reference={result.reference} onCursor={setCursor} />

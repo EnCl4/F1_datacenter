@@ -7,6 +7,7 @@ import {
   type SessionRow,
   type TrackRow,
 } from "./api";
+import { DeleteSessionDialog } from "./DeleteSessionDialog";
 
 const CATEGORIES = [
   ["", "All types"],
@@ -21,9 +22,18 @@ const CATEGORIES = [
  * to judge whether it is comparable. That is why every card carries the assists, weather
  * and difficulty alongside the best lap, rather than the time alone.
  */
-function SessionCard({ session, onOpen }: { session: SessionRow; onOpen: () => void }) {
+function SessionCard({
+  session,
+  onOpen,
+  onDelete,
+}: {
+  session: SessionRow;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
   return (
-    <button className="card" onClick={onOpen}>
+    <div className="card-row">
+      <button className="card" onClick={onOpen}>
       <div className="title">
         {session.track_name}
         <span className={`tag ${session.session_category === "race" ? "race" : ""}`}>
@@ -54,7 +64,20 @@ function SessionCard({ session, onOpen }: { session: SessionRow; onOpen: () => v
         {session.weather_name} · track {session.track_temp_c}°C · air {session.air_temp_c}°C · AI{" "}
         {session.ai_difficulty} · {session.assists_summary}
       </div>
-    </button>
+      </button>
+      <button
+        type="button"
+        className="card-delete"
+        title="Delete this session permanently"
+        aria-label={`Delete session: ${session.track_name}, ${session.session_type_name}, ${formatDate(session.started_at)}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+      >
+        Delete
+      </button>
+    </div>
   );
 }
 
@@ -73,6 +96,9 @@ export function SessionLibrary({
   const [to, setTo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<SessionRow | null>(null);
+  // Bumped after a deletion so the list (and the circuit filter counts) reload.
+  const [reload, setReload] = useState(0);
 
   const params = useMemo(() => {
     const p: Record<string, string> = { limit: "200" };
@@ -85,7 +111,7 @@ export function SessionLibrary({
 
   useEffect(() => {
     api.tracks().then((r) => setTracks(r.items)).catch(() => setTracks([]));
-  }, []);
+  }, [reload]);
 
   useEffect(() => {
     setLoading(true);
@@ -98,7 +124,7 @@ export function SessionLibrary({
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [params, onTotal]);
+  }, [params, onTotal, reload]);
 
   const filtered = track || category || from || to;
 
@@ -156,9 +182,25 @@ export function SessionLibrary({
             key={s.session_uid}
             session={s}
             onOpen={() => onOpen(s.session_uid)}
+            onDelete={() => setPendingDelete(s)}
           />
         ))}
       </div>
+
+      {pendingDelete ? (
+        <DeleteSessionDialog
+          session={pendingDelete}
+          onClose={(changed) => {
+            setPendingDelete(null);
+            // A partial deletion has already tombstoned the session: refresh the list.
+            if (changed) setReload((n) => n + 1);
+          }}
+          onDeleted={() => {
+            setPendingDelete(null);
+            setReload((n) => n + 1);
+          }}
+        />
+      ) : null}
     </>
   );
 }

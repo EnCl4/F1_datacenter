@@ -14,12 +14,14 @@ Accumulation is incremental rather than buffering every packet: an hour of drivi
 
 from __future__ import annotations
 
+import math
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from f1dc.capture.loss import LossMeter
 from f1dc.capture.rawlog import Record
+from f1dc.ingest.car import OFF_TRACK, CarDataBuilder
 from f1dc.ingest.traces import TraceBuilder
 from f1dc.wire.f1_2023 import UNDECODED_PACKET_IDS
 from f1dc.wire.f1_2023.car_damage import CarDamageCodec, CarDamageData
@@ -33,8 +35,10 @@ from f1dc.wire.f1_2023.final_classification import (
 )
 from f1dc.wire.f1_2023.lap_data import LapData, LapDataCodec
 from f1dc.wire.f1_2023.motion import MotionCodec
+from f1dc.wire.f1_2023.participants import ParticipantsCodec
 from f1dc.wire.f1_2023.session import SessionCodec, SessionData
 from f1dc.wire.f1_2023.session_history import SessionHistoryCodec, SessionHistoryData
+from f1dc.wire.f1_2023.tyre_sets import TyreSetsCodec
 from f1dc.wire.header import decode_header
 from f1dc.wire.registry import Registry, default_registry
 
@@ -119,6 +123,9 @@ class RawSession:
 
     traces: TraceBuilder = field(default_factory=TraceBuilder)
     """Per-metre lap traces (feature 002), fed frame by frame."""
+
+    car: CarDataBuilder = field(default_factory=CarDataBuilder)
+    """Per-lap car data, excursions, field, timeline and events (feature 003)."""
 
     @property
     def frames_lost(self) -> int:
@@ -222,9 +229,14 @@ class Sessionizer:
 
         session.packets += 1
         session.last_offset = record.timestamp
-        if session.first_time is None:
-            session.first_time = header.session_time
-        session.last_time = max(session.last_time or 0.0, header.session_time)
+        # The session clock is read only from packets that carry a frame counter. The packets
+        # the game sends as a session closes have zeroed counters, and in One-Shot Qualifying
+        # they also report sessionTime as FLT_MAX (3.4e38) -- the owner's three OSQ sessions
+        # showed durations of 3.4e38 seconds until this guard existed.
+        if header.has_frame_counter and math.isfinite(header.session_time):
+            if session.first_time is None:
+                session.first_time = header.session_time
+            session.last_time = max(session.last_time or 0.0, header.session_time)
 
         pid = header.packet_id
         if header.has_frame_counter:
@@ -236,7 +248,7 @@ class Sessionizer:
         elif pid == 6:
             self._on_telemetry(session, payload, header)
         elif pid == 1:
-            self._on_session(session, payload)
+            self._on_session(session, payload, header)
         elif pid == 7:
             self._on_car_status(session, payload)
         elif pid == 10:
@@ -248,12 +260,19 @@ class Sessionizer:
         elif pid == 8:
             self._on_classification(session, payload)
         elif pid == 3:
-            self._on_event(session, payload)
+            self._on_event(session, payload, header)
+        elif pid == 4:
+            session.car.participants = ParticipantsCodec.decode_active(payload)
+        elif pid == 12:
+            sets = TyreSetsCodec.decode(payload)
+            if sets.car_idx == session.player_index:
+                session.car.tyre_sets = sets
 
     # ------------------------------------------------------------------ handlers
 
-    def _on_session(self, session: RawSession, payload: bytes) -> None:
+    def _on_session(self, session: RawSession, payload: bytes, header) -> None:
         data = SessionCodec.decode(payload)
+        session.car.on_session(data, header.session_time)
         if session.session_data is None:
             # Conditions at the start of the session are what the library reports.
             session.session_data = data
@@ -263,6 +282,7 @@ class Sessionizer:
         has_frame = header.has_frame_counter
 
         lap = LapDataCodec.decode_car(payload, session.player_index)
+        session.car.on_lap_data(lap, header.session_time)
         number = lap.current_lap_num
         if number <= 0:
             return
@@ -270,6 +290,7 @@ class Sessionizer:
             session.traces.on_lap_data(
                 header.frame_identifier, number, lap.lap_distance,
                 lap.current_lap_time_ms, lap.sector,
+                gap_ahead_ms=math.nan if lap.car_position == 1 else lap.delta_to_car_in_front_ms,
             )
 
         if not session.laps:
@@ -333,9 +354,18 @@ class Sessionizer:
         if not header.has_frame_counter:
             return
         t = CarTelemetryCodec.decode_car(payload, session.player_index)
+        session.car.on_telemetry(t)
+        wheels = ("fl", "fr", "rl", "rr")
+        extra = (
+            *(getattr(t, f"tyre_surface_temp_{w}") for w in wheels),
+            *(getattr(t, f"tyre_inner_temp_{w}") for w in wheels),
+            *(getattr(t, f"brake_temp_{w}") for w in wheels),
+            *(getattr(t, f"tyre_pressure_{w}") for w in wheels),
+            1.0 if any(getattr(t, f"surface_type_{w}") in OFF_TRACK for w in wheels) else 0.0,
+        )
         session.traces.on_telemetry(
             header.frame_identifier, t.speed_kph, t.throttle, t.brake, t.steer,
-            t.gear, t.engine_rpm, t.drs,
+            t.gear, t.engine_rpm, t.drs, extra=extra,
         )
 
     def _on_car_status(self, session: RawSession, payload: bytes) -> None:
@@ -343,6 +373,7 @@ class Sessionizer:
         # Traction control and ABS live only here, not in the Session packet.
         session.traction_control = status.traction_control
         session.anti_lock_brakes = status.anti_lock_brakes
+        session.car.on_status(status)
 
         ctx = self._current_lap(session)
         if ctx is None:
@@ -358,6 +389,7 @@ class Sessionizer:
 
     def _on_car_damage(self, session: RawSession, payload: bytes) -> None:
         damage: CarDamageData = CarDamageCodec.decode_car(payload, session.player_index)
+        session.car.on_damage(damage)
         ctx = self._current_lap(session)
         if ctx is None:
             return
@@ -371,19 +403,23 @@ class Sessionizer:
 
     def _on_history(self, session: RawSession, payload: bytes) -> None:
         history: SessionHistoryData = SessionHistoryCodec.decode(payload)
+        session.car.history[history.car_idx] = history  # every car, for the field
         if history.car_idx == session.player_index:
             # Cumulative: the latest packet supersedes every earlier one.
             session.history = history
 
     def _on_classification(self, session: RawSession, payload: bytes) -> None:
         results = FinalClassificationCodec.decode_classified(payload)
+        session.car.classification = results
         if session.player_index < len(results):
             session.classification = results[session.player_index]
         elif results:
             session.classification = results[0]
 
-    def _on_event(self, session: RawSession, payload: bytes) -> None:
-        code = EventCodec.decode(payload).code
+    def _on_event(self, session: RawSession, payload: bytes, header) -> None:
+        event = EventCodec.decode(payload)
+        session.car.on_event(event, header.session_time, session.player_index)
+        code = event.code
         if not session.events or session.events[-1] != code:
             session.events.append(code)
 

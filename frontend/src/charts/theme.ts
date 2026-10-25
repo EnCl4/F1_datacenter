@@ -59,3 +59,18 @@ export function axisStyle(colors: ChartColors): Pick<
 
 /** Fixed y-axis width so stacked charts keep their plot areas aligned. */
 export const Y_AXIS_SIZE = 62;
+
+/**
+ * One colour per wheel, distinct on the dark background. Fronts are drawn solid and
+ * rears dashed (see WHEEL_DASH) so the pairing never relies on colour alone.
+ */
+export function wheelColors(colors: ChartColors): Record<"fl" | "fr" | "rl" | "rr", string> {
+  return { fl: colors.accent, fr: colors.amber, rl: colors.green, rr: "#b78cf2" };
+}
+
+export const WHEEL_DASH: Record<"fl" | "fr" | "rl" | "rr", number[] | undefined> = {
+  fl: undefined,
+  fr: undefined,
+  rl: [6, 4],
+  rr: [6, 4],
+};

@@ -38,7 +38,7 @@ def test_deliberately_undecoded_packets_are_not_reported_as_unknown(fixture_path
     sessionizer = Sessionizer(datetime(2026, 9, 4, tzinfo=UTC))
     sessionizer.feed(iter_records(fixture_path))
     assert sum(sessionizer.unknown.values()) == 0, dict(sessionizer.unknown)
-    assert set(sessionizer.declared_undecoded) == {4, 13}
+    assert set(sessionizer.declared_undecoded) == {13}
 
 
 def test_the_race_ended_at_the_chequered_flag(fixture_path) -> None:
@@ -93,3 +93,22 @@ def test_the_assists_summary_names_traction_control(ingested) -> None:
     assert "TC" in summary
     assert "ABS" in summary
     assert "manual gearbox" in summary
+
+
+def test_end_of_session_packets_do_not_set_the_session_clock() -> None:
+    """One-Shot Qualifying's closing packets report sessionTime = FLT_MAX with zeroed frame
+    counters. Read as a clock, they made three real sessions last 3.4e38 seconds."""
+    from f1dc.capture.rawlog import Record
+    from f1dc.wire.header import HEADER, HEADER_SIZE
+
+    def packet(pid, size, session_time, frame, overall):
+        head = HEADER.pack(2023, 23, 1, 21, 1, pid, 42, session_time, frame, overall, 0, 255)
+        return Record(timestamp=0.0, payload=head + bytes(size - HEADER_SIZE))
+
+    sessionizer = Sessionizer(datetime(2026, 10, 25, tzinfo=UTC))
+    for t in (1.0, 50.0, 120.0):
+        sessionizer._feed_one(packet(1, 644, t, int(t * 60), int(t * 60) + 9))
+    sessionizer._feed_one(packet(11, 1460, 3.4028234663852886e38, 0, 0))  # closing packet
+
+    session = sessionizer.result()[0]
+    assert session.duration_s == 119.0

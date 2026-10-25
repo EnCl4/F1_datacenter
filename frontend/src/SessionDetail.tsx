@@ -10,6 +10,18 @@ import {
   type SessionDetail as Detail,
   type StintRow,
 } from "./api";
+import { CarData } from "./CarData";
+import { Field } from "./Field";
+import { Timeline } from "./Timeline";
+import { DeleteSessionDialog } from "./DeleteSessionDialog";
+
+type Tab = "laps" | "car" | "field" | "timeline";
+const TABS: { id: Tab; label: string }[] = [
+  { id: "laps", label: "Laps" },
+  { id: "car", label: "Car data" },
+  { id: "field", label: "Field" },
+  { id: "timeline", label: "Timeline" },
+];
 
 /**
  * FR-022: the comparability context sits beside the lap times, not behind a menu.
@@ -111,11 +123,16 @@ export function SessionDetail({
   uid,
   onBack,
   onCompare,
+  onDeleted,
 }: {
   uid: string;
   onBack: () => void;
   onCompare: () => void;
+  /** The session was deleted: the app returns to the library. */
+  onDeleted: () => void;
 }) {
+  const [tab, setTab] = useState<Tab>("laps");
+  const [deleting, setDeleting] = useState(false);
   const [session, setSession] = useState<Detail | null>(null);
   const [laps, setLaps] = useState<LapRow[]>([]);
   const [stints, setStints] = useState<StintRow[]>([]);
@@ -146,9 +163,14 @@ export function SessionDetail({
         <span className="tag race">{session.session_type_name}</span>
         {session.started_late ? <span className="tag warn">started late</span> : null}
         {session.incomplete ? <span className="tag warn">incomplete recording</span> : null}
-        <button className="primary-btn" onClick={onCompare}>
-          Compare laps
-        </button>
+        <div className="head-actions">
+          <button className="primary-btn" onClick={onCompare}>
+            Compare laps
+          </button>
+          <button className="danger-outline-btn" onClick={() => setDeleting(true)}>
+            Delete session
+          </button>
+        </div>
       </div>
       <div className="detail-sub">
         {formatDate(session.started_at)} · {formatDuration(session.duration_s)} ·{" "}
@@ -158,6 +180,23 @@ export function SessionDetail({
 
       <ContextPanel session={session} />
 
+      <div className="tabs" role="tablist" aria-label="Session views">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            className={tab === t.id ? "active" : ""}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "laps" ? (
+        <div role="tabpanel">
       {stints.length > 0 ? (
         <>
           <h3 className="section-title">Stints</h3>
@@ -177,8 +216,37 @@ export function SessionDetail({
         </>
       ) : null}
 
-      <h3 className="section-title">Laps</h3>
-      <LapTable laps={laps} bestLap={session.best_lap_number} />
+          <h3 className="section-title">Laps</h3>
+          <LapTable laps={laps} bestLap={session.best_lap_number} />
+        </div>
+      ) : null}
+      {tab === "car" ? (
+        <div role="tabpanel">
+          <CarData uid={uid} laps={laps} />
+        </div>
+      ) : null}
+      {tab === "field" ? (
+        <div role="tabpanel">
+          <Field uid={uid} />
+        </div>
+      ) : null}
+      {tab === "timeline" ? (
+        <div role="tabpanel">
+          <Timeline uid={uid} />
+        </div>
+      ) : null}
+
+      {deleting ? (
+        <DeleteSessionDialog
+          session={session}
+          onClose={(changed) => {
+            setDeleting(false);
+            // A partial deletion removed the session from the library: leave this page.
+            if (changed) onDeleted();
+          }}
+          onDeleted={onDeleted}
+        />
+      ) : null}
     </>
   );
 }

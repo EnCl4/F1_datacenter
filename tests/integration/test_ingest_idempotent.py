@@ -29,7 +29,11 @@ from tests.conftest import FIXTURE_LOG_NAME, REFERENCE_LAPS, REFERENCE_UID
 #: different on a second run. That is not "the result" under FR-015; the session, its
 #: laps and its stints are. `test_provenance_is_the_only_thing_that_changes` pins that
 #: distinction so the exclusion cannot quietly widen.
-RESULT_FILES = (layout.SESSION_FILE, layout.LAPS_FILE, layout.STINTS_FILE, layout.TRACES_FILE)
+RESULT_FILES = (
+    layout.SESSION_FILE, layout.LAPS_FILE, layout.STINTS_FILE, layout.TRACES_FILE,
+    layout.LAP_CAR_FILE, layout.EXCURSIONS_FILE, layout.FIELD_FILE, layout.FIELD_LAPS_FILE,
+    layout.TIMELINE_FILE, layout.EVENTS_FILE, layout.TYRE_SETS_FILE,
+)
 
 
 def digest(paths: Paths) -> dict[str, str]:

@@ -8,8 +8,14 @@ from fastapi.testclient import TestClient
 from f1dc.api.main import create_app
 from tests.conftest import REFERENCE_LAPS, REFERENCE_UID
 
-CHANNELS = {"distance_m", "time_ms", "speed_kph", "throttle", "brake", "steer", "gear",
-            "rpm", "drs", "g_lat", "g_lon", "x", "z"}
+_W = ("fl", "fr", "rl", "rr")
+CHANNELS = {
+    "distance_m", "time_ms", "speed_kph", "throttle", "brake", "steer", "gear",
+    "rpm", "drs", "g_lat", "g_lon", "x", "z",
+    # feature 003
+    "gap_ahead_ms", "off_track",
+    *(f"{kind}_{w}" for kind in ("tyre_surface", "tyre_inner", "brake", "pressure") for w in _W),
+}
 
 
 @pytest.fixture(scope="module")
@@ -87,6 +93,13 @@ def test_laps_at_track(client) -> None:
 
 
 def test_still_no_write_routes(client) -> None:
+    """Constitution 1.1.0: the UI is read-only except ONE confirmed action, deleting a
+    session. Any other write route added here must fail this test."""
     schema = client.get("/api/openapi.json").json()
-    verbs = {m for path in schema["paths"].values() for m in path}
-    assert verbs <= {"get"}, verbs
+    writes = sorted(
+        (method, path)
+        for path, ops in schema["paths"].items()
+        for method in ops
+        if method in {"post", "put", "patch", "delete"}
+    )
+    assert writes == [("delete", "/api/sessions/{session_uid}")], writes

@@ -122,6 +122,15 @@ LAP_SCHEMA = pa.schema(
     ]
 )
 
+#: Wheel suffixes, in the order every per-wheel column group is written.
+_WHEELS = ("fl", "fr", "rl", "rr")
+
+
+def _wheels(prefix: str, dtype: pa.DataType) -> list[tuple[str, pa.DataType]]:
+    """One column per wheel: ``prefix_fl``, ``prefix_fr``, ``prefix_rl``, ``prefix_rr``."""
+    return [(f"{prefix}_{wheel}", dtype) for wheel in _WHEELS]
+
+
 # Per-metre lap traces (feature 002). Every channel is null inside a recording gap, so a
 # gap reads as missing data rather than as a flat line at zero.
 TRACE_SCHEMA = pa.schema(
@@ -141,6 +150,144 @@ TRACE_SCHEMA = pa.schema(
         ("g_lon", pa.float32()),
         ("x", pa.float32()),
         ("z", pa.float32()),
+        *_wheels("tyre_surface", pa.float32()),
+        *_wheels("tyre_inner", pa.float32()),
+        *_wheels("brake", pa.float32()),
+        *_wheels("pressure", pa.float32()),
+        ("gap_ahead_ms", pa.float32()),
+        ("off_track", pa.float32()),
+    ]
+)
+
+# Per-lap car summary (feature 003): CarTelemetry, CarStatus and CarDamage folded to one
+# row per lap for the player.
+LAP_CAR_SCHEMA = pa.schema(
+    [
+        ("session_uid", pa.string()),
+        ("lap_number", pa.int32()),
+        *_wheels("tyre_surface_avg", pa.float32()),
+        *_wheels("tyre_surface_max", pa.float32()),
+        *_wheels("tyre_inner_avg", pa.float32()),
+        *_wheels("tyre_inner_max", pa.float32()),
+        *_wheels("brake_avg", pa.float32()),
+        *_wheels("brake_max", pa.float32()),
+        *_wheels("pressure_avg", pa.float32()),
+        ("engine_temp_max", pa.float32()),
+        ("tyre_change_in_lap", pa.bool_()),
+        ("ers_start_mj", pa.float32()),
+        ("ers_end_mj", pa.float32()),
+        ("ers_deployed_mj", pa.float32()),
+        ("ers_harvested_mj", pa.float32()),
+        ("ers_balance_mj", pa.float32()),
+        ("ers_modes", pa.string()),
+        ("fuel_start_kg", pa.float32()),
+        ("fuel_end_kg", pa.float32()),
+        ("fuel_used_kg", pa.float32()),
+        ("fuel_mix", pa.string()),
+        ("brake_bias", pa.string()),
+        ("settings_changed", pa.bool_()),
+        ("damage_front_left_wing", pa.int16()),
+        ("damage_front_right_wing", pa.int16()),
+        ("damage_rear_wing", pa.int16()),
+        ("damage_floor", pa.int16()),
+        ("damage_diffuser", pa.int16()),
+        ("damage_sidepod", pa.int16()),
+        ("damage_gearbox", pa.int16()),
+        ("damage_engine", pa.int16()),
+        ("damage_increased", pa.bool_()),
+        ("excursions", pa.int16()),
+        ("excursion_m", pa.float32()),
+        ("drs_pct", pa.float32()),
+        ("position_at_line", pa.int16()),
+        ("gap_ahead_ms_at_line", pa.int32()),
+        ("corner_warnings", pa.int16()),
+        ("penalties_s", pa.int16()),
+    ]
+)
+
+# Track excursions (feature 003, research R3): one row per run of off-track samples.
+EXCURSION_SCHEMA = pa.schema(
+    [
+        ("session_uid", pa.string()),
+        ("lap_number", pa.int32()),
+        ("start_m", pa.float32()),
+        ("length_m", pa.float32()),
+        ("wheels", pa.string()),
+        ("surface", pa.string()),
+        ("session_time_s", pa.float32()),
+    ]
+)
+
+# Whole-field classification (feature 003): one row per car.
+FIELD_SCHEMA = pa.schema(
+    [
+        ("session_uid", pa.string()),
+        ("car_idx", pa.int16()),
+        ("name", pa.string()),
+        ("team_id", pa.int16()),
+        ("race_number", pa.int16()),
+        ("ai_controlled", pa.bool_()),
+        ("is_player", pa.bool_()),
+        ("best_lap_ms", pa.int32()),
+        ("best_lap_number", pa.int16()),
+        ("num_laps", pa.int16()),
+        ("finish_position", pa.int16()),
+        ("result_status", pa.string()),
+        ("stints", pa.string()),
+    ]
+)
+
+# Every car's lap times (feature 003), one row per completed lap.
+FIELD_LAPS_SCHEMA = pa.schema(
+    [
+        ("session_uid", pa.string()),
+        ("car_idx", pa.int16()),
+        ("lap_number", pa.int16()),
+        ("lap_time_ms", pa.int32()),
+        ("valid", pa.bool_()),
+    ]
+)
+
+# Session-wide conditions over time (feature 003): a row at start and on every change.
+TIMELINE_SCHEMA = pa.schema(
+    [
+        ("session_uid", pa.string()),
+        ("session_time_s", pa.float32()),
+        ("lap_number", pa.int16()),
+        ("weather", pa.string()),
+        ("track_temp_c", pa.int16()),
+        ("air_temp_c", pa.int16()),
+    ]
+)
+
+# Race events with their decoded detail (feature 003, see EventCodec.parsed).
+EVENT_SCHEMA = pa.schema(
+    [
+        ("session_uid", pa.string()),
+        ("session_time_s", pa.float32()),
+        ("lap_number", pa.int16()),
+        ("code", pa.string()),
+        ("vehicle_idx", pa.int16()),
+        ("other_vehicle_idx", pa.int16()),
+        ("value", pa.float32()),
+        ("involves_player", pa.bool_()),
+        ("description", pa.string()),
+    ]
+)
+
+# The player's tyre allocation (feature 003): one row per tyre set.
+TYRE_SET_SCHEMA = pa.schema(
+    [
+        ("session_uid", pa.string()),
+        ("set_index", pa.int16()),
+        ("actual_compound", pa.string()),
+        ("visual_compound", pa.string()),
+        ("wear_pct", pa.int16()),
+        ("available", pa.bool_()),
+        ("fitted", pa.bool_()),
+        ("lap_delta_ms", pa.int32()),
+        ("life_span", pa.int16()),
+        ("usable_life", pa.int16()),
     ]
 )
 

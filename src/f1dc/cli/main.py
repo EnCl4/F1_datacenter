@@ -79,6 +79,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_prune.add_argument("--dry-run", action="store_true")
     p_prune.add_argument("--yes", action="store_true")
 
+    p_delete = sub.add_parser("delete", help="PERMANENTLY delete a session and its recording")
+    _add_common(p_delete)
+    p_delete.add_argument("session_uid")
+    p_delete.add_argument("--confirm", required=True, help="the session's circuit name")
+
     p_star = sub.add_parser("star", help="keep a session's raw log permanently")
     _add_common(p_star)
     p_star.add_argument("session_uid")
@@ -178,6 +183,23 @@ def cmd_prune(args: argparse.Namespace) -> int:
     return run_prune(paths, args.older_than, dry_run=args.dry_run, assume_yes=args.yes)
 
 
+def cmd_delete(args: argparse.Namespace) -> int:
+    from f1dc.store.delete import DeleteError, delete_session
+
+    paths = load_paths(args.data_dir, allow_sync_root=args.allow_sync_root)
+    try:
+        report = delete_session(paths, args.session_uid, args.confirm)
+    except DeleteError as exc:
+        print(f"not deleted: {exc.message}", file=sys.stderr)
+        if exc.report is not None:
+            for path in exc.report.left_behind:
+                print(f"  left behind: {path}", file=sys.stderr)
+        return 2 if exc.code.startswith("confirmation") else 3
+    for path in report.removed:
+        print(f"deleted {path}")
+    return 0
+
+
 def cmd_star(args: argparse.Namespace) -> int:
     from f1dc.store.catalog import set_starred
 
@@ -197,6 +219,7 @@ COMMANDS = {
     "doctor": cmd_doctor,
     "prune": cmd_prune,
     "star": cmd_star,
+    "delete": cmd_delete,
 }
 
 

@@ -28,12 +28,20 @@ from f1dc.ingest.sessionizer import RawSession, Sessionizer
 from f1dc.ingest.traces import to_rows
 from f1dc.models import Recording
 from f1dc.store import catalog, layout
+from f1dc.store.lock import WriteLockBusy, write_lock
 from f1dc.store.schema import (
+    EVENT_SCHEMA,
+    EXCURSION_SCHEMA,
+    FIELD_LAPS_SCHEMA,
+    FIELD_SCHEMA,
+    LAP_CAR_SCHEMA,
     LAP_SCHEMA,
     RECORDING_SCHEMA,
     SESSION_SCHEMA,
     STINT_SCHEMA,
+    TIMELINE_SCHEMA,
     TRACE_SCHEMA,
+    TYRE_SET_SCHEMA,
     table_from_rows,
 )
 
@@ -42,6 +50,7 @@ log = logging.getLogger("f1dc.ingest")
 EXIT_OK = 0
 EXIT_UNKNOWN_FORMAT = 6
 EXIT_NO_LOGS = 7
+EXIT_BUSY = 8
 
 
 @dataclass
@@ -105,6 +114,7 @@ def ingest_log(paths: Paths, log_path: Path, *, report: IngestReport) -> list[st
 
         result = build(raw, recording_id)
         result.traces = build_traces(raw, result)
+        result.tables = car_tables(raw, result.session.session_uid, result.stints)
         recording = Recording(
             recording_id=recording_id,
             path=str(log_path),
@@ -152,6 +162,21 @@ def build_traces(raw: RawSession, result) -> dict[str, list] | None:
     return merged
 
 
+def car_tables(raw: RawSession, uid: str, player_stints: list | None = None) -> dict:
+    """Feature 003 tables for one session (data-model.md)."""
+    car = raw.car
+    cars, field_laps = car.field_rows(uid, raw.player_index, player_stints)
+    return {
+        layout.LAP_CAR_FILE: (car.lap_rows(uid), LAP_CAR_SCHEMA),
+        layout.EXCURSIONS_FILE: (car.excursion_rows(uid), EXCURSION_SCHEMA),
+        layout.FIELD_FILE: (cars, FIELD_SCHEMA),
+        layout.FIELD_LAPS_FILE: (field_laps, FIELD_LAPS_SCHEMA),
+        layout.TIMELINE_FILE: (car.timeline_rows(uid), TIMELINE_SCHEMA),
+        layout.EVENTS_FILE: (car.event_rows(uid), EVENT_SCHEMA),
+        layout.TYRE_SETS_FILE: (car.tyre_set_rows(uid), TYRE_SET_SCHEMA),
+    }
+
+
 def _write_session(paths: Paths, result) -> None:
     """Write to a temp directory, then rename into place. Idempotence is structural."""
     uid = result.session.session_uid
@@ -183,6 +208,8 @@ def _write_session(paths: Paths, result) -> None:
             temp / layout.TRACES_FILE,
             compression="zstd",
         )
+    for filename, (rows, schema) in result.tables.items():
+        pq.write_table(table_from_rows(rows, schema), temp / filename, compression="zstd")
     if result.recording is not None:
         pq.write_table(
             table_from_rows([result.recording.to_row()], RECORDING_SCHEMA),
@@ -211,7 +238,22 @@ def run_ingest(
 
     stored = catalog.stored_ingest_versions(paths)
 
+    # Shared with session deletion (feature 003, FR-031): the two never interleave.
+    try:
+        with write_lock(paths, "ingest") as lock:
+            _ingest_all(paths, logs, stored, report, lock=lock, force=force,
+                        explicit=explicit, compress_logs=compress_logs)
+    except WriteLockBusy as exc:
+        print(f"another writer is busy ({exc.holder}); try again shortly", file=sys.stderr)
+        return EXIT_BUSY
+
+    _print_report(report)
+    return report.exit_code
+
+
+def _ingest_all(paths, logs, stored, report, *, lock, force, explicit, compress_logs) -> None:
     for log_path in logs:
+        lock.refresh()  # an hour-long ingest must not look like a stale lock
         if not log_path.exists():
             report.errors.append(f"{log_path} does not exist")
             continue
@@ -223,7 +265,8 @@ def run_ingest(
         try:
             ingest_log(paths, log_path, report=report)
             report.logs_processed += 1
-        except Exception as exc:
+        except Exception as exc:  # one bad log must not stop the rest
+            log.exception("failed to ingest %s", log_path.name)
             report.errors.append(f"{log_path.name}: {exc}")
             continue
 
@@ -234,9 +277,6 @@ def run_ingest(
                 report.compressed_bytes_saved += before - after_path.stat().st_size
             except OSError as exc:
                 report.errors.append(f"{log_path.name}: compression failed, original kept ({exc})")
-
-    _print_report(report)
-    return report.exit_code
 
 
 def _already_current(log_path: Path, stored: dict[str, str]) -> bool:

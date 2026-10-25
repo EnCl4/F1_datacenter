@@ -19,6 +19,22 @@ from f1dc.wire.base import ScalarCodec
 from f1dc.wire.f1_2023 import enums
 from f1dc.wire.registry import register
 
+_NONE_BYTE = 255
+
+_FTLP = struct.Struct("<Bf")  # vehicleIdx, lapTime (s)
+_OVTK = struct.Struct("<BB")  # overtakingVehicleIdx, beingOvertakenVehicleIdx
+_SPTP = struct.Struct("<BfBBBf")  # vehicleIdx, speed, overall, driver, fastestIdx, fastest
+_PENA = struct.Struct("<7B")  # penaltyType, infringementType, vehicle, other, time, lap, places
+_SINGLE_VEHICLE = struct.Struct("<B")  # RTMT, RCWN
+
+
+@dataclass(frozen=True, slots=True)
+class EventDetail:
+    vehicle_idx: int | None
+    other_vehicle_idx: int | None
+    value: float | None
+    extra: dict
+
 
 @dataclass(frozen=True, slots=True)
 class EventData:
@@ -38,6 +54,47 @@ class EventData:
     @property
     def is_flashback(self) -> bool:
         return self.code == "FLBK"
+
+    def parsed(self) -> EventDetail:
+        """Decode the 12-byte ``detail`` union according to ``code``."""
+        d = self.detail
+        if self.code == "FTLP":
+            vehicle, lap_time = _FTLP.unpack_from(d)
+            return EventDetail(vehicle, None, lap_time, {})
+        if self.code == "OVTK":
+            overtaking, overtaken = _OVTK.unpack_from(d)
+            return EventDetail(overtaking, overtaken, None, {})
+        if self.code == "SPTP":
+            vehicle, speed, overall, driver, fastest_idx, fastest_speed = _SPTP.unpack_from(d)
+            return EventDetail(
+                vehicle,
+                None,
+                speed,
+                {
+                    "is_overall_fastest": bool(overall),
+                    "is_driver_fastest": bool(driver),
+                    "fastest_vehicle_idx": fastest_idx,
+                    "fastest_speed": fastest_speed,
+                },
+            )
+        if self.code == "PENA":
+            penalty, infringement, vehicle, other, time, lap_num, places = _PENA.unpack_from(d)
+            return EventDetail(
+                vehicle,
+                None if other == _NONE_BYTE else other,
+                None if time == _NONE_BYTE else float(time),
+                {
+                    "penalty_type": penalty,
+                    "infringement_type": infringement,
+                    "time": time,
+                    "lap_num": lap_num,
+                    "places_gained": places,
+                },
+            )
+        if self.code in ("RTMT", "RCWN"):
+            (vehicle,) = _SINGLE_VEHICLE.unpack_from(d)
+            return EventDetail(vehicle, None, None, {})
+        return EventDetail(None, None, None, {})
 
 
 @register

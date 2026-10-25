@@ -205,3 +205,6 @@ class IngestResult:
     recording: Recording | None = None
     traces: dict[str, list] | None = None
     """Columnar per-metre lap traces (feature 002), or None if no lap had channel data."""
+    tables: dict[str, tuple[list[dict], Any]] = field(default_factory=dict)
+    """Feature 003 tables: filename -> (rows, pyarrow schema). Always written, even empty,
+    so their presence means "processed at 1.2.0" and absence means "needs re-ingest"."""

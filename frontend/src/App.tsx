@@ -83,6 +83,7 @@ export function App() {
           uid={selected}
           onBack={() => setSelected(null)}
           onCompare={() => setComparing(true)}
+          onDeleted={() => setSelected(null)}
         />
       ) : (
         <SessionLibrary onOpen={setSelected} onTotal={setTotal} />
