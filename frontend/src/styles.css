@@ -153,6 +153,26 @@ tr.best td.time { color: var(--green); font-weight: 600; }
 .pace-legend .key { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-left: 8px; }
 .pace-legend .key.solid { background: var(--accent); }
 .pace-legend .key.hollow { border: 1.5px solid var(--amber); background: var(--panel); }
+.pace-legend .key.line { width: 14px; height: 2px; border-radius: 1px; background: var(--green); }
+.pace-legend .key.tri {
+  width: 0; height: 0; border-radius: 0; background: none;
+  border-left: 4.5px solid transparent; border-right: 4.5px solid transparent;
+  border-bottom: 7px solid var(--amber);
+}
+.pace-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 6px 0 2px; }
+.pace-controls .control-group { display: flex; align-items: center; gap: 8px; }
+.pace-controls .control-label { color: var(--dim); font-size: 12px; }
+.pace-controls .segmented { margin-left: 0; }
+.pace-controls .segmented button { padding: 3px 10px; font-size: 12px; }
+.range-field { display: inline-flex; align-items: center; gap: 5px; color: var(--dim); font-size: 12px; }
+.range-field input {
+  width: 74px; padding: 3px 6px; font-size: 12px; font-variant-numeric: tabular-nums;
+  background: var(--bg, transparent); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 5px;
+}
+.range-field input:focus { outline: none; border-color: var(--accent); }
+.range-field input.bad, .range-field input.bad:focus { border-color: var(--red); }
+.avg-pill { margin-left: 8px; color: var(--green); font-size: 12px; }
 .pace-readout { min-height: 22px; margin: 4px 0 4px; font-size: 13px; }
 .pace-readout .dim { color: var(--dim); }
 .reason-pill {
